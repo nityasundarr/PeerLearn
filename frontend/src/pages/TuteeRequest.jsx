@@ -249,12 +249,12 @@ const RequestHelpFlow = () => {
         </div>
       </div>
 
-      {/* Duration */}
+      {/* Duration (SRS 2.2.3.6: exactly 1h, 2h, 4h) */}
       <div style={{ marginBottom: '28px' }}>
         <label style={{ display: 'block', fontSize: '14px', fontWeight: '600', marginBottom: '12px', color: '#1c1917' }}>Session Duration</label>
         <div style={{ display: 'flex', gap: '12px' }}>
-          {['30 min', '1 hour', '1.5 hours', '2 hours'].map((dur, i) => (
-            <button key={dur} style={{ padding: '12px 24px', background: i === 1 ? '#1a5f4a' : '#fff', color: i === 1 ? '#fff' : '#57534e', border: `2px solid ${i === 1 ? '#1a5f4a' : '#e7e5e4'}`, borderRadius: '10px', cursor: 'pointer', fontWeight: '500' }}>{dur}</button>
+          {['1 hour', '2 hours', '4 hours'].map((dur, i) => (
+            <button key={dur} style={{ padding: '12px 24px', background: i === 0 ? '#1a5f4a' : '#fff', color: i === 0 ? '#fff' : '#57534e', border: `2px solid ${i === 0 ? '#1a5f4a' : '#e7e5e4'}`, borderRadius: '10px', cursor: 'pointer', fontWeight: '500' }}>{dur}</button>
           ))}
         </div>
       </div>
