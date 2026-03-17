@@ -548,7 +548,7 @@ Build phases in strict order. Do NOT start Phase N+1 until all Phase N routes ha
 - `[x]` `backend/app/utils/validators.py` — reusable `.edu.sg` email validator, name regex, password rules
 - `[x]` `backend/app/utils/rate_limiter.py` — in-memory (or Redis) 3-req/hr rate limiter for email endpoints
 - `[x]` `backend/app/utils/contact_filter.py` — regex to detect+block phone numbers and emails in message content
-- `[ ]` Pytest config + first smoke test (`GET /health` returns 200)
+- `[x]` Pytest config + first smoke test (`GET /health` returns 200)
 - `[x]` Delete legacy Node.js backend skeleton (`backend/src/`, `backend/package.json`)
 
 ### Phase 1 — Auth (UC-1.1 → UC-1.6)
