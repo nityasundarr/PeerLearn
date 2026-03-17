@@ -60,7 +60,21 @@ const OfferToTutorFlow = () => {
       <h1 style={{ fontSize: '28px', fontWeight: '700', marginBottom: '8px', color: '#1c1917' }}>What can you teach? 💡</h1>
       <p style={{ color: '#57534e', marginBottom: '36px' }}>Select the subjects and specific topics you're confident teaching.</p>
 
-      {/* Subject Selection with "Other" (SRS 2.2.2.2) */}
+      {/* Academic Levels (SRS 2.2.2.2: multi-select) */}
+      <div style={{ marginBottom: '32px' }}>
+        <label style={{ display: 'block', fontSize: '14px', fontWeight: '600', marginBottom: '12px', color: '#1c1917' }}>
+          Academic Levels you can teach <span style={{ color: '#ef4444' }}>*</span>
+        </label>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px' }}>
+          {['Primary', 'Secondary', 'Junior College', 'Polytechnic', 'ITE', 'University'].map(level => (
+            <button key={level} style={{ padding: '12px 20px', background: '#fff', color: '#57534e', border: '2px solid #e7e5e4', borderRadius: '10px', cursor: 'pointer', fontWeight: '500', fontSize: '14px' }}>
+              {level}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Subject Selection with "Other" (SRS 2.2.2.3) */}
       <div style={{ marginBottom: '32px' }}>
         <label style={{ display: 'block', fontSize: '14px', fontWeight: '600', marginBottom: '12px', color: '#1c1917' }}>
           Select Subjects <span style={{ color: '#ef4444' }}>*</span>
@@ -217,14 +231,14 @@ const OfferToTutorFlow = () => {
         </div>
       </div>
 
-      {/* Max Hours Per Week (SRS 2.2.2.6: max 20 sessions) */}
+      {/* Max Hours Per Week (SRS 2.2.2.8: exactly 2h, 3h, 5h, 8h, 10h) */}
       <div style={{ marginBottom: '28px' }}>
         <label style={{ display: 'block', fontSize: '14px', fontWeight: '600', marginBottom: '8px', color: '#1c1917' }}>
           Maximum hours per week <span style={{ color: '#ef4444' }}>*</span>
         </label>
-        <p style={{ fontSize: '13px', color: '#a8a29e', marginBottom: '12px' }}>Helps prevent burnout. Must be a positive integer, max 20 hours.</p>
+        <p style={{ fontSize: '13px', color: '#a8a29e', marginBottom: '12px' }}>Helps prevent burnout. Select your weekly tutoring limit.</p>
         <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-          {['2 hrs', '3 hrs', '5 hrs', '8 hrs', '10 hrs', '15 hrs', '20 hrs'].map((hrs, i) => (
+          {['2 hrs', '3 hrs', '5 hrs', '8 hrs', '10 hrs'].map((hrs, i) => (
             <button key={hrs} style={{ padding: '12px 20px', background: i === 2 ? '#1a5f4a' : '#fff', color: i === 2 ? '#fff' : '#57534e', border: `2px solid ${i === 2 ? '#1a5f4a' : '#e7e5e4'}`, borderRadius: '10px', cursor: 'pointer', fontWeight: '500' }}>{hrs}</button>
           ))}
         </div>

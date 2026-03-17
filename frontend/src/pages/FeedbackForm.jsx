@@ -190,15 +190,15 @@ const FeedbackForm = () => {
           </div>
         </div>
 
-        {/* Written Review (SRS 2.10.3.2-3: optional, 1-100 chars) */}
+        {/* Written Review (SRS 2.9.4.5.3.3: optional, 1-500 chars) */}
         <div style={{ marginBottom: '32px' }}>
           <label style={{ display: 'block', fontSize: '14px', fontWeight: '600', marginBottom: '8px', color: '#1c1917' }}>
             Written Review
-            <span style={{ fontWeight: '400', color: '#a8a29e', marginLeft: '8px' }}>(optional, 1-100 characters)</span>
+            <span style={{ fontWeight: '400', color: '#a8a29e', marginLeft: '8px' }}>(optional, 1-500 characters)</span>
           </label>
           <textarea
             rows={3}
-            maxLength={100}
+            maxLength={500}
             value={reviewText}
             onChange={(e) => setReviewText(e.target.value)}
             placeholder="Share your experience to help other students..."
@@ -226,10 +226,10 @@ const FeedbackForm = () => {
             </span>
             <span style={{ 
               fontSize: '12px', 
-              color: reviewText.length > 90 ? '#f59e0b' : '#a8a29e',
-              fontWeight: reviewText.length > 90 ? '500' : '400'
+              color: reviewText.length > 490 ? '#f59e0b' : '#a8a29e',
+              fontWeight: reviewText.length > 490 ? '500' : '400'
             }}>
-              {reviewText.length} / 100
+              {reviewText.length} / 500
             </span>
           </div>
         </div>

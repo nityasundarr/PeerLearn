@@ -33,6 +33,12 @@ export const AuthProvider = ({ children }) => {
   }, []);
 
   const signUp = async (email, password, metadata = {}) => {
+    if (!email || !email.toLowerCase().endsWith('.edu.sg')) {
+      return {
+        data: null,
+        error: { message: 'Only .edu.sg email addresses are allowed to register.' },
+      };
+    }
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
