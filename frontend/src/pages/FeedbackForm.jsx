@@ -269,7 +269,7 @@ const FeedbackForm = () => {
           </div>
         </div>
 
-        {/* Written Review (SRS 2.9.4.5.3.3: optional, 1-500 chars) */}
+        {/* Written Review (SRS 2.10.3.2-3: optional, 1-500 chars) */}
         <div style={{ marginBottom: '32px' }}>
           <label style={{ display: 'block', fontSize: '14px', fontWeight: '600', marginBottom: '8px', color: '#1c1917' }}>
             Written Review
@@ -307,7 +307,7 @@ const FeedbackForm = () => {
             <span style={{ 
               fontSize: '12px', 
               color: reviewText.length > 450 ? '#f59e0b' : '#a8a29e',
-              fontWeight: reviewText.length > 450 ? '500' : '400
+              fontWeight: reviewText.length > 450 ? '500' : '400'
             }}>
               {reviewText.length} / 500
             </span>
