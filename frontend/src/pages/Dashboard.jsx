@@ -114,6 +114,31 @@ const mapNotificationToUi = (n) => ({
 });
 
 const Dashboard = () => {
+  const formatSlot = (slot) => {
+    if (!slot) return '';
+    const dateStr = typeof slot === 'string' ? slot.split(' ')[0] : slot.date;
+    const hourVal = typeof slot === 'string' ?
+      parseInt(String(slot.split(' ')[1] || '')) : slot.hour_slot;
+    if (!dateStr || isNaN(hourVal)) return String(slot);
+    const d = new Date(dateStr + 'T00:00:00');
+    const dayStr = d.toLocaleDateString('en-SG',
+      { weekday: 'short', day: 'numeric', month: 'short' });
+    const fmt = (n) => n === 0 ? '12AM' : n < 12 ?
+      n + 'AM' : n === 12 ? '12PM' : (n - 12) + 'PM';
+    return dayStr + ', ' + fmt(hourVal) + '-' + fmt(hourVal + 1);
+  };
+
+  const getUrgency = (s) => {
+    const val = s.urgency_category ||
+      s.request?.urgency_category ||
+      s.learning_need?.urgency_category;
+    const map = {
+      'exam_soon': '🔥 Exam Soon',
+      'assignment_due': '⚡ Assignment Due',
+      'general_study': '📚 General Study'
+    };
+    return map[val] || val || '—';
+  };
   const navigate = useNavigate();
   const { user } = useAuth();
   const [activeTab, setActiveTab] = useState('home');
@@ -592,17 +617,17 @@ const Dashboard = () => {
             <div style={{ display: 'flex', gap: '16px' }}>
               <div style={{ width: '56px', height: '56px', background: '#f59e0b', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 'bold', fontSize: '18px' }}>{req.initials}</div>
               <div>
-                <h3 style={{ fontSize: '18px', fontWeight: '600', color: '#1c1917', marginBottom: '4px' }}>{(req.subjects?.length ? req.subjects.join(', ') : req.subject)}: {(req.topics?.length ? req.topics.join(', ') : req.topic)}</h3>
+                <h3 style={{ fontSize: '18px', fontWeight: '600', color: '#1c1917', marginBottom: '4px' }}>{req.subjects?.join(', ') || req.academic_level || req.subject || '—'}</h3>
                 <p style={{ fontSize: '14px', color: '#57534e', marginBottom: '4px' }}>from {req.student} • {req.level}</p>
                 <div style={{ display: 'flex', gap: '16px', fontSize: '14px', color: '#57534e', flexWrap: 'wrap' }}>
                   <span>📅 {req.date}</span>
                   <span>🕐 {req.time}</span>
                   {req.distance_bucket && req.distance_bucket !== '—' && <span>📍 {req.distance_bucket}</span>}
-                  <span style={{ background: req.urgency === 'Exam Soon' ? '#fef2f2' : '#fef3c7', color: req.urgency === 'Exam Soon' ? '#ef4444' : '#f59e0b', padding: '2px 8px', borderRadius: '6px', fontSize: '12px', fontWeight: '600' }}>🔥 {req.urgency}</span>
+                  <span style={{ background: getUrgency(req).includes('Exam') ? '#fef2f2' : '#fef3c7', color: getUrgency(req).includes('Exam') ? '#ef4444' : '#f59e0b', padding: '2px 8px', borderRadius: '6px', fontSize: '12px', fontWeight: '600' }}>{getUrgency(req)}</span>
                 </div>
                 {(req.time_slots?.length > 0) && (
                   <div style={{ fontSize: '13px', color: '#57534e', marginTop: '8px' }}>
-                    Preferred slots: {req.time_slots.map((s) => typeof s === 'object' ? `${s.date || s.day_of_week} ${s.hour_slot ?? ''}h` : String(s)).join(', ') || '—'}
+                    Preferred slots: {req.time_slots.map((s) => formatSlot(s)).filter(Boolean).join(', ') || '—'}
                   </div>
                 )}
               </div>
