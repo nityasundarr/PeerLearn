@@ -103,6 +103,8 @@ const RequestHelpFlow = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [hovered, setHovered] = useState(null);
+  const [noTutorsHover, setNoTutorsHover] = useState(null);
+  const [awaitingScreenHover, setAwaitingScreenHover] = useState(null);
 
   // Predefined subjects and topics (matching Tutor flow)
   const allSubjects = [
@@ -838,12 +840,12 @@ const RequestHelpFlow = () => {
               type="button"
               onClick={handleGoToMyDashboard}
               disabled={loading}
-              onMouseEnter={() => setHovered('await-dash')}
-              onMouseLeave={() => setHovered(null)}
+              onMouseEnter={() => !loading && setAwaitingScreenHover('dash')}
+              onMouseLeave={() => setAwaitingScreenHover(null)}
               style={{
                 width: '100%',
                 padding: '14px 24px',
-                background: loading ? '#e7e5e4' : (hovered === 'await-dash' ? '#2d7a61' : '#1a5f4a'),
+                background: loading ? '#e7e5e4' : (awaitingScreenHover === 'dash' ? '#145040' : '#1a5f4a'),
                 color: loading ? '#a8a29e' : '#fff',
                 border: 'none',
                 borderRadius: '10px',
@@ -859,14 +861,14 @@ const RequestHelpFlow = () => {
               type="button"
               onClick={handleModifyRequestAfterTutorSubmit}
               disabled={loading}
-              onMouseEnter={() => !loading && setHovered('await-mod')}
-              onMouseLeave={() => setHovered(null)}
+              onMouseEnter={() => !loading && setAwaitingScreenHover('modify')}
+              onMouseLeave={() => setAwaitingScreenHover(null)}
               style={{
                 width: '100%',
                 padding: '14px 24px',
-                background: hovered === 'await-mod' ? '#f0faf5' : '#fff',
+                background: awaitingScreenHover === 'modify' ? '#f0faf5' : '#fff',
                 color: '#1a5f4a',
-                border: `2px solid ${hovered === 'await-mod' ? '#1a5f4a' : '#e7e5e4'}`,
+                border: `2px solid ${awaitingScreenHover === 'modify' ? '#1a5f4a' : '#e7e5e4'}`,
                 borderRadius: '10px',
                 fontWeight: '600',
                 cursor: loading ? 'not-allowed' : 'pointer',
@@ -880,14 +882,14 @@ const RequestHelpFlow = () => {
               type="button"
               onClick={handleCancelThisRequest}
               disabled={loading}
-              onMouseEnter={() => !loading && setHovered('await-cancel')}
-              onMouseLeave={() => setHovered(null)}
+              onMouseEnter={() => !loading && setAwaitingScreenHover('cancel')}
+              onMouseLeave={() => setAwaitingScreenHover(null)}
               style={{
                 width: '100%',
                 padding: '14px 24px',
-                background: hovered === 'await-cancel' ? '#fef2f2' : '#fff',
+                background: awaitingScreenHover === 'cancel' ? '#fef2f2' : '#fff',
                 color: '#b91c1c',
-                border: `1px solid ${hovered === 'await-cancel' ? '#fecaca' : '#e7e5e4'}`,
+                border: `1px solid ${awaitingScreenHover === 'cancel' ? '#ef4444' : '#e7e5e4'}`,
                 borderRadius: '10px',
                 fontWeight: '500',
                 cursor: loading ? 'not-allowed' : 'pointer',
@@ -953,7 +955,20 @@ const RequestHelpFlow = () => {
               <button
                 type="button"
                 onClick={handleSubmitRequestAndWait}
-                style={{ width: '100%', padding: '16px', background: '#1a5f4a', color: '#fff', border: 'none', borderRadius: '12px', fontWeight: '600', cursor: 'pointer', fontSize: '16px' }}
+                onMouseEnter={() => setNoTutorsHover('submit')}
+                onMouseLeave={() => setNoTutorsHover(null)}
+                style={{
+                  width: '100%',
+                  padding: '16px',
+                  background: noTutorsHover === 'submit' ? '#145040' : '#1a5f4a',
+                  color: '#fff',
+                  border: 'none',
+                  borderRadius: '12px',
+                  fontWeight: '600',
+                  cursor: 'pointer',
+                  fontSize: '16px',
+                  transition: 'all 0.2s ease',
+                }}
               >
                 📬 Submit Request &amp; Wait for a Tutor
               </button>
@@ -964,7 +979,20 @@ const RequestHelpFlow = () => {
             <button
               type="button"
               onClick={handleModifyRequestFromNoTutors}
-              style={{ width: '100%', padding: '14px', background: '#fff', color: '#1a5f4a', border: '2px solid #1a5f4a', borderRadius: '12px', fontWeight: '600', cursor: 'pointer', fontSize: '15px' }}
+              onMouseEnter={() => setNoTutorsHover('modify')}
+              onMouseLeave={() => setNoTutorsHover(null)}
+              style={{
+                width: '100%',
+                padding: '14px',
+                background: noTutorsHover === 'modify' ? '#f0faf5' : '#fff',
+                color: '#1a5f4a',
+                border: '2px solid #1a5f4a',
+                borderRadius: '12px',
+                fontWeight: '600',
+                cursor: 'pointer',
+                fontSize: '15px',
+                transition: 'all 0.2s ease',
+              }}
             >
               ← Modify my request
             </button>

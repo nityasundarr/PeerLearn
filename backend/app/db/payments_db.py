@@ -196,7 +196,8 @@ def add_workload_hours(tutor_id: str, week_start: str, hours: int) -> None:
                 "tutor_id": tutor_id,
                 "week_start": week_start,
                 "confirmed_hours": new_hours,
-            }
+            },
+            on_conflict="tutor_id,week_start",
         ).execute()
     except AppError:
         raise

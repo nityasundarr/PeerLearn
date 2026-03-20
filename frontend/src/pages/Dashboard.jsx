@@ -232,7 +232,7 @@ const Dashboard = () => {
   const [selectedSession, setSelectedSession] = useState(null);
 
   const [summary, setSummary] = useState(null);
-  const [badges, setBadges] = useState({ tutoring: 0, notifications: 0, chats: 0 });
+  const [badges, setBadges] = useState({ notifications: 0, chats: 0 });
   const [learningSessions, setLearningSessions] = useState([]);
   const [tutoringSessions, setTutoringSessions] = useState([]);
   const [tutorIncomingRequests, setTutorIncomingRequests] = useState([]);
@@ -283,6 +283,53 @@ const Dashboard = () => {
     });
   })();
 
+  const rolesLower = (Array.isArray(user?.roles) ? user.roles : []).map((r) => String(r).toLowerCase());
+  const hasTutorRole = rolesLower.includes('tutor');
+  const hasTuteeRole = rolesLower.length === 0 || rolesLower.includes('tutee') || rolesLower.includes('student');
+
+  const learningSessionActionCount = learningSessions.filter((s) => {
+    const st = normalizeSessionStatus(s);
+    return st === 'tutor_accepted' || st === 'pending_confirmation' || st === 'pending_confirm';
+  }).length;
+
+  const tutoringPendingSelectionCount = mergedTutorIncoming.filter((s) => {
+    const st = normalizeSessionStatus(s);
+    return st === 'pending_tutor_selection';
+  }).length;
+
+  const unreadNotifications = notifications.filter((n) => n.unread);
+  const unreadTotal = unreadNotifications.length;
+
+  let tuteeUnreadNotifCount = 0;
+  let tutorUnreadNotifCount = 0;
+  if (hasTuteeRole && !hasTutorRole) {
+    tuteeUnreadNotifCount = unreadTotal;
+  } else if (hasTutorRole && !hasTuteeRole) {
+    tutorUnreadNotifCount = unreadTotal;
+  } else if (hasTuteeRole && hasTutorRole) {
+    unreadNotifications.forEach((n) => {
+      const roleHint = String(n.role || n.recipient_role || '').toLowerCase();
+      if (roleHint === 'tutor') tutorUnreadNotifCount += 1;
+      else if (roleHint === 'tutee' || roleHint === 'student') tuteeUnreadNotifCount += 1;
+      else {
+        const blob = `${n.type || ''} ${n.title || ''} ${n.message || n.content || ''}`.toLowerCase();
+        if (blob.includes('incoming') || blob.includes('new request') || blob.includes('respond to')) tutorUnreadNotifCount += 1;
+        else tuteeUnreadNotifCount += 1;
+      }
+    });
+  }
+
+  const learningBadge = hasTuteeRole ? learningSessionActionCount + tuteeUnreadNotifCount : 0;
+  const tutoringBadge = hasTutorRole ? tutoringPendingSelectionCount + tutorUnreadNotifCount : 0;
+
+  const tabBadges = {
+    home: 0,
+    learning: learningBadge,
+    tutoring: tutoringBadge,
+    chats: badges.chats,
+    notifications: badges.notifications,
+  };
+
   const fetchSummary = async () => {
     try {
       const { data } = await api.get('/dashboard/summary');
@@ -296,12 +343,11 @@ const Dashboard = () => {
     try {
       const { data } = await api.get('/dashboard/badges');
       setBadges({
-        tutoring: data.tutoring ?? data.tutoring_count ?? 0,
         notifications: data.notifications ?? data.unread_notifications ?? 0,
         chats: data.chats ?? data.unread_chats ?? 0,
       });
     } catch {
-      setBadges({ tutoring: 0, notifications: 0, chats: 0 });
+      setBadges({ notifications: 0, chats: 0 });
     }
   };
 
@@ -375,7 +421,14 @@ const Dashboard = () => {
     let cancelled = false;
     const load = async () => {
       setLoading(true);
-      await Promise.all([fetchSummary(), fetchBadges()]);
+      await Promise.all([
+        fetchSummary(),
+        fetchBadges(),
+        fetchLearningSessions(),
+        fetchTutoringSessions(),
+        fetchTutorIncomingRequests(),
+        fetchNotifications(),
+      ]);
       if (!cancelled) setLoading(false);
     };
     load();
@@ -625,9 +678,10 @@ const Dashboard = () => {
   // HOME TAB
   const HomeTab = () => {
     const stats = summary?.stats || {};
+    const pendingCount = learningSessions.filter((s) => normalizeSessionStatus(s) === 'pending_tutor_selection').length;
     const statItems = [
       { label: 'Upcoming', value: String(stats.upcoming ?? upcomingSessions.length ?? 0), icon: '📅' },
-      { label: 'Pending', value: String(stats.pending ?? incomingRequests.length ?? 0), icon: '⏳' },
+      { label: 'Pending', value: String(pendingCount), icon: '⏳' },
       { label: 'Hours Learned', value: String(stats.hours_learned ?? 0), icon: '📚' },
       { label: 'Hours Taught', value: String(stats.hours_taught ?? 0), icon: '🎓' },
     ];
