@@ -128,6 +128,21 @@ const Dashboard = () => {
     return dayStr + ', ' + fmt(hourVal) + '-' + fmt(hourVal + 1);
   };
 
+  const getUrgency = (s) => {
+    const val = s.urgency_category ||
+      s.urgency_level ||
+      s.urgency;
+    const map = {
+      'exam_soon': '🔥 Exam Soon',
+      'assignment_due': '⚡ Assignment Due',
+      'general_study': '📚 General Study',
+      'very_urgent': '🔥 Very Urgent',
+      'urgent': '⚡ Urgent',
+      'normal': '📚 Normal'
+    };
+    return map[val] || val || '—';
+  };
+
   const navigate = useNavigate();
   const { user } = useAuth();
   const [activeTab, setActiveTab] = useState('home');
@@ -586,27 +601,6 @@ const Dashboard = () => {
 
   // MY TUTORING TAB
   const TutoringTab = () => {
-    const urgencyLabel = (session) => {
-      console.log('[session keys and values]', JSON.stringify(session, null, 2));
-      console.log('[urgency]', session.urgency_category, Object.keys(session));
-      const urgencyMap = {
-        'exam_soon': '🔥 Exam Soon',
-        'assignment_due': '⚡ Assignment Due',
-        'general_study': '📚 General Study'
-      };
-      const ln = Array.isArray(session.learning_needs) ? session.learning_needs[0] : session.learning_needs;
-      const nestedReq = session.tutoring_requests;
-      const urgencyVal =
-        session.urgency_category ||
-        (nestedReq && typeof nestedReq === 'object' ? nestedReq.urgency_category : null) ||
-        ln?.urgency_category ||
-        session['tutoring_requests.urgency_category'] ||
-        session.urgency_level ||
-        session.urgency;
-      const normalized = typeof urgencyVal === 'string' ? urgencyVal.trim() : urgencyVal;
-      return urgencyMap[normalized] || '—';
-    };
-
     const slotsForRequest = (req) => {
       const raw = req.time_slots || [];
       if (raw.length === 0) return [];
@@ -659,7 +653,7 @@ const Dashboard = () => {
                 </h3>
                 <p style={{ fontSize: '14px', color: '#57534e', marginBottom: '4px' }}>from {req.student} • {req.level}</p>
                 <div style={{ display: 'flex', gap: '16px', fontSize: '14px', color: '#57534e', flexWrap: 'wrap' }}>
-                  <span>📅 Requested: {req.date || '—'} at {(req.time || '—').toUpperCase()} | {urgencyLabel(req)}</span>
+                  <span>📅 Requested: {req.date || '—'} at {(req.time || '—').toUpperCase()} | {getUrgency(req)}</span>
                   {req.distance_bucket && req.distance_bucket !== '—' && <span>📍 {req.distance_bucket}</span>}
                 </div>
                 {(req.time_slots?.length > 0) && (
