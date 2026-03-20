@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import DashboardLayout from '../components/DashboardLayout';
 import api from '../services/api';
@@ -209,6 +209,329 @@ const urgencyLabel = {
   normal: '📚 General Study'
 };
 
+// CHATS TAB (SRS 2.9) — UC-5.1, messaging tied to sessions (module scope for stable identity)
+const ChatsTab = React.memo(function ChatsTab({
+  chatSessions,
+  selectedChatSessionId,
+  setSelectedChatSessionId,
+  chatMessages,
+  setChatMessages,
+  currentUserId,
+  hovered,
+  setHovered,
+}) {
+  const [chatInput, setChatInput] = useState('');
+  const [chatInputFocus, setChatInputFocus] = useState(false);
+  const selectedSession = chatSessions.find(
+    (s) => (s.id ?? s.session_id) === selectedChatSessionId,
+  );
+
+  const getOtherPersonName = (s) => {
+    if (!s) return 'Unknown';
+    const uid = String(currentUserId ?? '');
+    if (String(s.tutee_id) === uid) {
+      return s.tutor_name || s.tutor_full_name || (typeof s.tutor === 'string' ? s.tutor : s.tutor?.full_name) || 'Tutor';
+    }
+    return s.tutee_name || s.tutee_full_name || (typeof s.tutee === 'string' ? s.tutee : s.tutee?.full_name) || 'Student';
+  };
+
+  const formatMsgTime = (ts) => {
+    if (!ts) return '';
+    const d = new Date(ts);
+    return d.toLocaleTimeString('en-SG', {
+      hour: 'numeric', minute: '2-digit', hour12: true,
+    });
+  };
+
+  const handleSend = async () => {
+    const text = chatInput.trim();
+    if (!text || !selectedChatSessionId) return;
+    setChatInput('');
+    try {
+      await api.post(
+        `/sessions/${selectedChatSessionId}/messages`,
+        { content: text },
+      );
+      const res = await api.get(
+        `/sessions/${selectedChatSessionId}/messages`,
+      );
+      const data = res.data;
+      const msgs = Array.isArray(data) ? data
+        : Array.isArray(data?.messages) ? data.messages
+          : Array.isArray(data?.data) ? data.data : [];
+      setChatMessages(msgs);
+    } catch (err) {
+      console.error('[Chats] send error:', err.response?.data);
+      setChatInput(text);
+    }
+  };
+
+  if (chatSessions.length === 0) {
+    return (
+      <div style={{
+        background: '#fff', borderRadius: '16px',
+        border: '1px solid #e7e5e4', padding: '48px 24px',
+        textAlign: 'center', color: '#57534e',
+      }}
+      >
+        <div style={{ fontSize: '48px', marginBottom: '16px' }}>💬</div>
+        <h3 style={{ fontWeight: '600', marginBottom: '8px' }}>
+          No active sessions yet
+        </h3>
+        <p>Start a tutoring session to begin messaging.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{
+      display: 'grid', gridTemplateColumns: '320px 1fr',
+      height: 'calc(100vh - 200px)', background: '#fff',
+      borderRadius: '16px', border: '1px solid #e7e5e4', overflow: 'hidden',
+    }}
+    >
+      <div style={{ borderRight: '1px solid #e7e5e4', overflowY: 'auto' }}>
+        <div style={{ padding: '20px', borderBottom: '1px solid #e7e5e4' }}>
+          <h3 style={{
+            fontSize: '18px', fontWeight: '600',
+            color: '#1c1917', marginBottom: '0',
+          }}
+          >Messages
+          </h3>
+        </div>
+        {chatSessions.map((s) => {
+          const sid = s.id ?? s.session_id;
+          const isSelected = selectedChatSessionId === sid;
+          const otherName = getOtherPersonName(s);
+          const initials = otherName.slice(0, 2).toUpperCase();
+          const subj = Array.isArray(s.subjects) ? s.subjects[0] : s.subject;
+          const sched = s.scheduled_at || s.date || s.created_at;
+          return (
+            <div
+              key={sid}
+              onClick={() => setSelectedChatSessionId(sid)}
+              onMouseEnter={() => setHovered(`chat-${sid}`)}
+              onMouseLeave={() => setHovered(null)}
+              style={{
+                padding: '16px 20px',
+                borderBottom: '1px solid #f5f5f4',
+                cursor: 'pointer',
+                background: isSelected ? '#f0fdf4'
+                  : hovered === `chat-${sid}` ? '#f0fdf4' : '#fff',
+                borderLeft: isSelected ? '3px solid #1a5f4a'
+                  : hovered === `chat-${sid}` ? '3px solid #1a5f4a'
+                    : '3px solid transparent',
+                transition: 'all 0.15s ease',
+              }}
+            >
+              <div style={{ display: 'flex', gap: '12px' }}>
+                <div style={{
+                  width: '48px', height: '48px',
+                  background: '#f59e0b', borderRadius: '12px',
+                  display: 'flex', alignItems: 'center',
+                  justifyContent: 'center', color: '#fff',
+                  fontWeight: 'bold', flexShrink: 0,
+                }}
+                >{initials}
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{
+                    fontWeight: '600', color: '#1c1917',
+                    fontSize: '14px', marginBottom: '4px',
+                  }}
+                  >{otherName}
+                  </div>
+                  <div style={{
+                    fontSize: '12px', color: '#a8a29e',
+                    whiteSpace: 'nowrap', overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                  }}
+                  >
+                    {subj || s.academic_level || '—'} •{' '}
+                    {sched ? formatDate(sched) : 'TBD'}
+                  </div>
+                  <div style={{
+                    fontSize: '11px', marginTop: '4px',
+                    padding: '2px 8px', borderRadius: '8px', display: 'inline-block',
+                    background: normalizeSessionStatus(s) === 'confirmed' ? '#dcfce7' : '#fef3c7',
+                    color: normalizeSessionStatus(s) === 'confirmed' ? '#166534' : '#92400e',
+                  }}
+                  >
+                    {(s.status || s.state || '—').replace(/_/g, ' ')}
+                  </div>
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      <div style={{ display: 'flex', flexDirection: 'column' }}>
+        <div style={{
+          padding: '16px 24px', borderBottom: '1px solid #e7e5e4',
+          display: 'flex', alignItems: 'center', gap: '12px',
+        }}
+        >
+          <div style={{
+            width: '44px', height: '44px', background: '#f59e0b',
+            borderRadius: '10px', display: 'flex', alignItems: 'center',
+            justifyContent: 'center', color: '#fff', fontWeight: 'bold',
+          }}
+          >
+            {getOtherPersonName(selectedSession).slice(0, 2).toUpperCase()}
+          </div>
+          <div>
+            <div style={{ fontWeight: '600', color: '#1c1917' }}>
+              {getOtherPersonName(selectedSession)}
+            </div>
+            <div style={{ fontSize: '13px', color: '#57534e' }}>
+              {(Array.isArray(selectedSession?.subjects) ? selectedSession.subjects[0] : selectedSession?.subject) || '—'} •{' '}
+              {(Array.isArray(selectedSession?.topics) ? selectedSession.topics[0] : selectedSession?.topic) || '—'}
+            </div>
+          </div>
+        </div>
+
+        <div style={{
+          flex: 1, padding: '24px', overflowY: 'auto',
+          background: '#fafaf9',
+        }}
+        >
+          {chatMessages.length === 0 && (
+            <div style={{
+              textAlign: 'center', color: '#a8a29e',
+              marginTop: '48px',
+            }}
+            >
+              No messages yet. Say hello! 👋
+            </div>
+          )}
+          {chatMessages.map((msg, idx) => {
+            const isOwn = String(msg.sender_id) === String(currentUserId);
+            const msgId = msg.id || msg.message_id || idx;
+            return (
+              <div
+                key={msgId}
+                style={{
+                  display: 'flex', gap: '10px',
+                  marginBottom: '16px',
+                  flexDirection: isOwn ? 'row-reverse' : 'row',
+                  alignItems: 'flex-end',
+                }}
+              >
+                <div style={{
+                  width: '32px', height: '32px',
+                  background: isOwn ? '#1a5f4a' : '#f59e0b',
+                  borderRadius: '8px', display: 'flex',
+                  alignItems: 'center', justifyContent: 'center',
+                  color: '#fff', fontWeight: 'bold', fontSize: '11px',
+                  flexShrink: 0,
+                }}
+                >
+                  {isOwn ? 'Me'
+                    : getOtherPersonName(selectedSession).slice(0, 2).toUpperCase()}
+                </div>
+                <div style={{
+                  textAlign: isOwn ? 'right' : 'left',
+                  maxWidth: '320px',
+                }}
+                >
+                  <div style={{ fontSize: '11px', color: '#a8a29e', marginBottom: '4px' }}>
+                    {isOwn ? 'You' : getOtherPersonName(selectedSession)}
+                    {' · '}
+                    {formatMsgTime(msg.sent_at || msg.created_at)}
+                  </div>
+                  <div style={{
+                    background: isOwn ? '#1a5f4a' : '#fff',
+                    padding: '12px 16px',
+                    borderRadius: isOwn ? '12px 12px 4px 12px'
+                      : '12px 12px 12px 4px',
+                    display: 'inline-block',
+                    boxShadow: isOwn ? 'none'
+                      : '0 1px 4px rgba(0,0,0,0.08)',
+                  }}
+                  >
+                    <p style={{
+                      fontSize: '14px', margin: 0,
+                      color: isOwn ? '#fff' : '#1c1917',
+                    }}
+                    >
+                      {msg.content}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        <div style={{
+          padding: '16px 24px', borderTop: '1px solid #e7e5e4',
+          background: '#fff',
+        }}
+        >
+          <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-end' }}>
+            <div style={{
+              flex: 1, background: '#f5f5f4',
+              borderRadius: '12px', padding: '12px 16px',
+              border: chatInputFocus ? '1px solid #1a5f4a' : '1px solid transparent',
+              transition: 'border 0.15s ease',
+            }}
+            >
+              <textarea
+                rows={1}
+                value={chatInput}
+                onChange={(e) => setChatInput(e.target.value)}
+                onFocus={() => setChatInputFocus(true)}
+                onBlur={() => setChatInputFocus(false)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    handleSend();
+                  }
+                }}
+                placeholder="Type a message... (Enter to send)"
+                style={{
+                  width: '100%', border: 'none',
+                  background: 'transparent', fontSize: '14px',
+                  resize: 'none', outline: 'none',
+                  fontFamily: 'inherit', boxSizing: 'border-box',
+                }}
+              />
+            </div>
+            <button
+              type="button"
+              onClick={handleSend}
+              disabled={!chatInput.trim()}
+              onMouseEnter={() => setHovered('chat-send')}
+              onMouseLeave={() => setHovered(null)}
+              style={{
+                width: '48px', height: '48px',
+                background: !chatInput.trim() ? '#e7e5e4'
+                  : hovered === 'chat-send' ? '#145040' : '#1a5f4a',
+                border: 'none', borderRadius: '12px',
+                cursor: chatInput.trim() ? 'pointer' : 'not-allowed',
+                color: '#fff', fontSize: '20px',
+                display: 'flex', alignItems: 'center',
+                justifyContent: 'center',
+                transition: 'all 0.2s ease',
+              }}
+            >
+              ➤
+            </button>
+          </div>
+          <p style={{
+            fontSize: '11px', color: '#a8a29e',
+            marginTop: '8px', textAlign: 'center',
+          }}
+          >
+            Messages are for session coordination only
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+});
+
 const Dashboard = () => {
   const formatSlot = (slot) => {
     if (!slot) return '';
@@ -254,8 +577,12 @@ const Dashboard = () => {
   const [chatSessions, setChatSessions] = useState([]);
   const [selectedChatSessionId, setSelectedChatSessionId] = useState(null);
   const [chatMessages, setChatMessages] = useState([]);
-  const [chatInput, setChatInput] = useState('');
   const [chatPollingRef, setChatPollingRef] = useState(null);
+
+  const stableSetChatSessionId = useCallback(
+    (id) => setSelectedChatSessionId(id),
+    [],
+  );
 
   const sessionStates = {
     PENDING_TUTOR: { label: 'Pending Tutor Selection', color: '#f59e0b', bg: '#fef3c7' },
@@ -498,7 +825,9 @@ const Dashboard = () => {
 
   useEffect(() => {
     if (!selectedChatSessionId) return;
+    if (activeTab !== 'chats') return;
     const fetchMessages = async () => {
+      if (activeTab !== 'chats') return;
       try {
         const res = await api.get(`/sessions/${selectedChatSessionId}/messages`);
         const data = res.data;
@@ -518,7 +847,7 @@ const Dashboard = () => {
       clearInterval(interval);
       setChatPollingRef(null);
     };
-  }, [selectedChatSessionId]);
+  }, [selectedChatSessionId, activeTab]);
 
   useEffect(() => {
     learningSessions.forEach((sess) => {
@@ -729,30 +1058,6 @@ const Dashboard = () => {
       fetchBadges();
     } catch {
       // error handled by api interceptor or UI
-    }
-  };
-
-  const handleChatSend = async () => {
-    if (!chatInput.trim() || !selectedChatSessionId) return;
-    const text = chatInput.trim();
-    setChatInput('');
-    try {
-      const res = await api.post(
-        `/sessions/${selectedChatSessionId}/messages`,
-        { content: text },
-      );
-      console.log('[Chats] sent:', res.data);
-      const updated = await api.get(
-        `/sessions/${selectedChatSessionId}/messages`,
-      );
-      const data = updated.data;
-      const msgs = Array.isArray(data) ? data
-        : Array.isArray(data?.messages) ? data.messages
-          : Array.isArray(data?.data) ? data.data : [];
-      setChatMessages(msgs);
-    } catch (err) {
-      console.error('[Chats] send error:', err.response?.data);
-      setChatInput(text);
     }
   };
 
@@ -1140,297 +1445,6 @@ const Dashboard = () => {
     );
   };
 
-  // CHATS TAB (SRS 2.9) — UC-5.1, messaging tied to sessions
-  const ChatsTab = () => {
-    const [chatInputFocus, setChatInputFocus] = useState(false);
-    const currentUserId = user?.id || user?.user_id;
-    const selectedSession = chatSessions.find(
-      (s) => (s.id ?? s.session_id) === selectedChatSessionId,
-    );
-
-    const getOtherPersonName = (s) => {
-      if (!s) return 'Unknown';
-      const uid = String(currentUserId ?? '');
-      if (String(s.tutee_id) === uid) {
-        return s.tutor_name || s.tutor_full_name || (typeof s.tutor === 'string' ? s.tutor : s.tutor?.full_name) || 'Tutor';
-      }
-      return s.tutee_name || s.tutee_full_name || (typeof s.tutee === 'string' ? s.tutee : s.tutee?.full_name) || 'Student';
-    };
-
-    const formatMsgTime = (ts) => {
-      if (!ts) return '';
-      const d = new Date(ts);
-      return d.toLocaleTimeString('en-SG', {
-        hour: 'numeric', minute: '2-digit', hour12: true,
-      });
-    };
-
-    if (chatSessions.length === 0) {
-      return (
-        <div style={{
-          background: '#fff', borderRadius: '16px',
-          border: '1px solid #e7e5e4', padding: '48px 24px',
-          textAlign: 'center', color: '#57534e',
-        }}
-        >
-          <div style={{ fontSize: '48px', marginBottom: '16px' }}>💬</div>
-          <h3 style={{ fontWeight: '600', marginBottom: '8px' }}>
-            No active sessions yet
-          </h3>
-          <p>Start a tutoring session to begin messaging.</p>
-        </div>
-      );
-    }
-
-    return (
-      <div style={{
-        display: 'grid', gridTemplateColumns: '320px 1fr',
-        height: 'calc(100vh - 200px)', background: '#fff',
-        borderRadius: '16px', border: '1px solid #e7e5e4', overflow: 'hidden',
-      }}
-      >
-        <div style={{ borderRight: '1px solid #e7e5e4', overflowY: 'auto' }}>
-          <div style={{ padding: '20px', borderBottom: '1px solid #e7e5e4' }}>
-            <h3 style={{
-              fontSize: '18px', fontWeight: '600',
-              color: '#1c1917', marginBottom: '0',
-            }}
-            >Messages
-            </h3>
-          </div>
-          {chatSessions.map((s) => {
-            const sid = s.id ?? s.session_id;
-            const isSelected = selectedChatSessionId === sid;
-            const otherName = getOtherPersonName(s);
-            const initials = otherName.slice(0, 2).toUpperCase();
-            const subj = Array.isArray(s.subjects) ? s.subjects[0] : s.subject;
-            const sched = s.scheduled_at || s.date || s.created_at;
-            return (
-              <div
-                key={sid}
-                onClick={() => setSelectedChatSessionId(sid)}
-                onMouseEnter={() => setHovered(`chat-${sid}`)}
-                onMouseLeave={() => setHovered(null)}
-                style={{
-                  padding: '16px 20px',
-                  borderBottom: '1px solid #f5f5f4',
-                  cursor: 'pointer',
-                  background: isSelected ? '#f0fdf4'
-                    : hovered === `chat-${sid}` ? '#f0fdf4' : '#fff',
-                  borderLeft: isSelected ? '3px solid #1a5f4a'
-                    : hovered === `chat-${sid}` ? '3px solid #1a5f4a'
-                      : '3px solid transparent',
-                  transition: 'all 0.15s ease',
-                }}
-              >
-                <div style={{ display: 'flex', gap: '12px' }}>
-                  <div style={{
-                    width: '48px', height: '48px',
-                    background: '#f59e0b', borderRadius: '12px',
-                    display: 'flex', alignItems: 'center',
-                    justifyContent: 'center', color: '#fff',
-                    fontWeight: 'bold', flexShrink: 0,
-                  }}
-                  >{initials}
-                  </div>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{
-                      fontWeight: '600', color: '#1c1917',
-                      fontSize: '14px', marginBottom: '4px',
-                    }}
-                    >{otherName}
-                    </div>
-                    <div style={{
-                      fontSize: '12px', color: '#a8a29e',
-                      whiteSpace: 'nowrap', overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                    }}
-                    >
-                      {subj || s.academic_level || '—'} •{' '}
-                      {sched ? formatDate(sched) : 'TBD'}
-                    </div>
-                    <div style={{
-                      fontSize: '11px', marginTop: '4px',
-                      padding: '2px 8px', borderRadius: '8px', display: 'inline-block',
-                      background: normalizeSessionStatus(s) === 'confirmed' ? '#dcfce7' : '#fef3c7',
-                      color: normalizeSessionStatus(s) === 'confirmed' ? '#166534' : '#92400e',
-                    }}
-                    >
-                      {(s.status || s.state || '—').replace(/_/g, ' ')}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-
-        <div style={{ display: 'flex', flexDirection: 'column' }}>
-          <div style={{
-            padding: '16px 24px', borderBottom: '1px solid #e7e5e4',
-            display: 'flex', alignItems: 'center', gap: '12px',
-          }}
-          >
-            <div style={{
-              width: '44px', height: '44px', background: '#f59e0b',
-              borderRadius: '10px', display: 'flex', alignItems: 'center',
-              justifyContent: 'center', color: '#fff', fontWeight: 'bold',
-            }}
-            >
-              {getOtherPersonName(selectedSession).slice(0, 2).toUpperCase()}
-            </div>
-            <div>
-              <div style={{ fontWeight: '600', color: '#1c1917' }}>
-                {getOtherPersonName(selectedSession)}
-              </div>
-              <div style={{ fontSize: '13px', color: '#57534e' }}>
-                {(Array.isArray(selectedSession?.subjects) ? selectedSession.subjects[0] : selectedSession?.subject) || '—'} •{' '}
-                {(Array.isArray(selectedSession?.topics) ? selectedSession.topics[0] : selectedSession?.topic) || '—'}
-              </div>
-            </div>
-          </div>
-
-          <div style={{
-            flex: 1, padding: '24px', overflowY: 'auto',
-            background: '#fafaf9',
-          }}
-          >
-            {chatMessages.length === 0 && (
-              <div style={{
-                textAlign: 'center', color: '#a8a29e',
-                marginTop: '48px',
-              }}
-              >
-                No messages yet. Say hello! 👋
-              </div>
-            )}
-            {chatMessages.map((msg, idx) => {
-              const isOwn = String(msg.sender_id) === String(currentUserId);
-              const msgId = msg.id || msg.message_id || idx;
-              return (
-                <div
-                  key={msgId}
-                  style={{
-                    display: 'flex', gap: '10px',
-                    marginBottom: '16px',
-                    flexDirection: isOwn ? 'row-reverse' : 'row',
-                    alignItems: 'flex-end',
-                  }}
-                >
-                  <div style={{
-                    width: '32px', height: '32px',
-                    background: isOwn ? '#1a5f4a' : '#f59e0b',
-                    borderRadius: '8px', display: 'flex',
-                    alignItems: 'center', justifyContent: 'center',
-                    color: '#fff', fontWeight: 'bold', fontSize: '11px',
-                    flexShrink: 0,
-                  }}
-                  >
-                    {isOwn ? 'Me'
-                      : getOtherPersonName(selectedSession).slice(0, 2).toUpperCase()}
-                  </div>
-                  <div style={{
-                    textAlign: isOwn ? 'right' : 'left',
-                    maxWidth: '320px',
-                  }}
-                  >
-                    <div style={{ fontSize: '11px', color: '#a8a29e', marginBottom: '4px' }}>
-                      {isOwn ? 'You' : getOtherPersonName(selectedSession)}
-                      {' · '}
-                      {formatMsgTime(msg.sent_at || msg.created_at)}
-                    </div>
-                    <div style={{
-                      background: isOwn ? '#1a5f4a' : '#fff',
-                      padding: '12px 16px',
-                      borderRadius: isOwn ? '12px 12px 4px 12px'
-                        : '12px 12px 12px 4px',
-                      display: 'inline-block',
-                      boxShadow: isOwn ? 'none'
-                        : '0 1px 4px rgba(0,0,0,0.08)',
-                    }}
-                    >
-                      <p style={{
-                        fontSize: '14px', margin: 0,
-                        color: isOwn ? '#fff' : '#1c1917',
-                      }}
-                      >
-                        {msg.content}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-
-          <div style={{
-            padding: '16px 24px', borderTop: '1px solid #e7e5e4',
-            background: '#fff',
-          }}
-          >
-            <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-end' }}>
-              <div style={{
-                flex: 1, background: '#f5f5f4',
-                borderRadius: '12px', padding: '12px 16px',
-                border: chatInputFocus ? '1px solid #1a5f4a' : '1px solid transparent',
-                transition: 'border 0.15s ease',
-              }}
-              >
-                <textarea
-                  rows={1}
-                  value={chatInput}
-                  onChange={(e) => setChatInput(e.target.value)}
-                  onFocus={() => setChatInputFocus(true)}
-                  onBlur={() => setChatInputFocus(false)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && !e.shiftKey) {
-                      e.preventDefault();
-                      handleChatSend();
-                    }
-                  }}
-                  placeholder="Type a message... (Enter to send)"
-                  style={{
-                    width: '100%', border: 'none',
-                    background: 'transparent', fontSize: '14px',
-                    resize: 'none', outline: 'none',
-                    fontFamily: 'inherit', boxSizing: 'border-box',
-                  }}
-                />
-              </div>
-              <button
-                type="button"
-                onClick={handleChatSend}
-                disabled={!chatInput.trim()}
-                onMouseEnter={() => setHovered('chat-send')}
-                onMouseLeave={() => setHovered(null)}
-                style={{
-                  width: '48px', height: '48px',
-                  background: !chatInput.trim() ? '#e7e5e4'
-                    : hovered === 'chat-send' ? '#145040' : '#1a5f4a',
-                  border: 'none', borderRadius: '12px',
-                  cursor: chatInput.trim() ? 'pointer' : 'not-allowed',
-                  color: '#fff', fontSize: '20px',
-                  display: 'flex', alignItems: 'center',
-                  justifyContent: 'center',
-                  transition: 'all 0.2s ease',
-                }}
-              >
-                ➤
-              </button>
-            </div>
-            <p style={{
-              fontSize: '11px', color: '#a8a29e',
-              marginTop: '8px', textAlign: 'center',
-            }}
-            >
-              Messages are for session coordination only
-            </p>
-          </div>
-        </div>
-      </div>
-    );
-  };
-
   // NOTIFICATIONS TAB
   const NotificationsTab = () => (
     <div>
@@ -1656,7 +1670,18 @@ return (
         {activeTab === 'home' && <HomeTab />}
         {activeTab === 'learning' && <LearningTab />}
         {activeTab === 'tutoring' && <TutoringTab />}
-        {activeTab === 'chats' && <ChatsTab />}
+        {activeTab === 'chats' && (
+          <ChatsTab
+            chatSessions={chatSessions}
+            selectedChatSessionId={selectedChatSessionId}
+            setSelectedChatSessionId={stableSetChatSessionId}
+            chatMessages={chatMessages}
+            setChatMessages={setChatMessages}
+            currentUserId={user?.id || user?.user_id}
+            hovered={hovered}
+            setHovered={setHovered}
+          />
+        )}
         {activeTab === 'notifications' && <NotificationsTab />}
       </DashboardLayout>
       {showDetailPanel && <div onClick={() => { setShowDetailPanel(false); setSelectedSession(null); }} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.3)', zIndex: 999 }}></div>}
