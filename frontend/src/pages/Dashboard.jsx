@@ -1222,7 +1222,7 @@ const Dashboard = () => {
             <div style={{ fontSize: '15px', fontWeight: '600', color: '#166534' }}>🎓 A matching tutor has been found for your request!</div>
             <div style={{ fontSize: '13px', color: '#15803d', marginTop: '4px' }}>Review the tutor and confirm your session</div>
           </div>
-          <button type="button" onClick={() => setActiveTab('learning')} onMouseEnter={() => setHovered('home-pa-view-match')} onMouseLeave={() => setHovered(null)} style={{ padding: '10px 16px', background: hovered === 'home-pa-view-match' ? '#16a34a' : '#22c55e', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: '600', cursor: 'pointer', fontSize: '14px', whiteSpace: 'nowrap' }}>View Match →</button>
+          <button type="button" onClick={() => { setActiveTab('learning'); setLearningFilterTab('pending'); }} onMouseEnter={() => setHovered('home-pa-view-match')} onMouseLeave={() => setHovered(null)} style={{ padding: '10px 16px', background: hovered === 'home-pa-view-match' ? '#16a34a' : '#22c55e', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: '600', cursor: 'pointer', fontSize: '14px', whiteSpace: 'nowrap' }}>View Match →</button>
         </div>,
       );
     }
