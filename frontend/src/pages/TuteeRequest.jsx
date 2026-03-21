@@ -320,7 +320,7 @@ const RequestHelpFlow = () => {
   };
 
   const handleGoToDashboardAfterWaitlist = async () => {
-    await new Promise((resolve) => setTimeout(resolve, 500));
+    await new Promise((resolve) => setTimeout(resolve,1500));
     navigate('/dashboard', { state: { refresh: true } });
   };
 
