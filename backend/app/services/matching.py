@@ -135,7 +135,6 @@ def match_open_requests_for_tutor(tutor_id: str) -> None:
                 print(f"[Matching] create_session failed for request {req_id}: {exc}")
                 continue
 
-            session_id = session_row.get("id") if isinstance(session_row, dict) else None
             subjects = request.get("subjects") or []
             subject_label = subjects[0] if subjects else "your subject"
 
@@ -144,8 +143,6 @@ def match_open_requests_for_tutor(tutor_id: str) -> None:
                 f"A tutor matching your request for {subject_label} has been "
                 "found. Check My Learning to review and confirm."
             )
-            if session_id:
-                message = f"{message} (session_id: {session_id})"
 
             notifications_db.create_notification(
                 str(tutee_id),

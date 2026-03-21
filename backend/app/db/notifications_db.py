@@ -90,6 +90,9 @@ def mark_notification_read(notification_id: str, user_id: str) -> dict:
     Raises NotFoundError if the notification does not exist for this user.
     Returns the updated row.
     """
+    if not notification_id or notification_id == "undefined":
+        logger.warning("mark_notification_read called with invalid id: %s", notification_id)
+        raise NotFoundError("Notification not found.")
     try:
         supabase.table("notifications").update({"is_read": True}).eq("id", notification_id).eq("user_id", user_id).execute()
         row = get_notification_by_id(notification_id, user_id)
