@@ -53,6 +53,8 @@ const FeedbackForm = () => {
   const [alreadyRated, setAlreadyRated] = useState(false);
   const [rating, setRating] = useState(0);
   const [hoveredRating, setHoveredRating] = useState(0);
+  const [aspectRatings, setAspectRatings] = useState({});
+  const [hoveredAspect, setHoveredAspect] = useState({ key: null, star: 0 });
   const [hovered, setHovered] = useState(null);
   const [reviewText, setReviewText] = useState('');
   const [traits, setTraits] = useState([]);
@@ -227,26 +229,47 @@ const FeedbackForm = () => {
             { label: 'Communication', emoji: '💬' },
             { label: 'Punctuality', emoji: '⏰' },
             { label: 'Helpfulness', emoji: '🤝' },
-          ].map((aspect, i) => (
-            <div key={i} style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              padding: '12px 0',
-              borderBottom: i < 3 ? '1px solid #e7e5e4' : 'none',
-            }}>
-              <span style={{ fontSize: '14px', color: '#57534e' }}>
-                {aspect.emoji} {aspect.label}
-              </span>
-              <div style={{ display: 'flex', gap: '4px' }}>
-                {[1, 2, 3, 4, 5].map(star => (
-                  <span key={star} style={{ fontSize: '20px', cursor: 'pointer' }}>
-                    {star <= 4 ? '⭐' : '☆'}
-                  </span>
-                ))}
+          ].map((aspect, i) => {
+            const val = aspectRatings[aspect.label] || 0;
+            const hov = hoveredAspect.key === aspect.label ? hoveredAspect.star : 0;
+            return (
+              <div key={i} style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                padding: '12px 0',
+                borderBottom: i < 3 ? '1px solid #e7e5e4' : 'none',
+              }}>
+                <span style={{ fontSize: '14px', color: '#57534e' }}>
+                  {aspect.emoji} {aspect.label}
+                </span>
+                <div style={{ display: 'flex', gap: '2px' }}>
+                  {[1, 2, 3, 4, 5].map(star => (
+                    <button
+                      key={star}
+                      type="button"
+                      onClick={() => !alreadyRated && setAspectRatings(prev => ({ ...prev, [aspect.label]: star }))}
+                      onMouseEnter={() => !alreadyRated && setHoveredAspect({ key: aspect.label, star })}
+                      onMouseLeave={() => setHoveredAspect({ key: null, star: 0 })}
+                      disabled={alreadyRated}
+                      style={{
+                        background: 'transparent',
+                        border: 'none',
+                        padding: '0 1px',
+                        lineHeight: '1',
+                        fontSize: '20px',
+                        cursor: alreadyRated ? 'default' : 'pointer',
+                        transition: 'transform 0.1s',
+                        transform: (hov >= star || val >= star) ? 'scale(1.15)' : 'scale(1)',
+                      }}
+                    >
+                      {(hov >= star || val >= star) ? '⭐' : '☆'}
+                    </button>
+                  ))}
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
 
         {/* Tags */}
