@@ -11,12 +11,15 @@ import ProfileSettings from './pages/ProfileSettings';
 import SessionMessaging from './pages/SessionMessaging';
 import FeedbackForm from './pages/FeedbackForm';
 import SessionDetail from './pages/SessionDetail';
+import AdminOverview from './pages/Admin/Overview';
+import DemandAnalytics from './pages/Admin/DemandAnalytics';
+import SupplyAnalytics from './pages/Admin/SupplyAnalytics';
+import GapAnalysis from './pages/Admin/GapAnalysis';
 
 // Pages - new ones you'll create (placeholder for now)
 // import SignUp from './pages/SignUp';
 // import VerifyEmail from './pages/VerifyEmail';
 // import ResetPassword from './pages/ResetPassword';
-// import SessionDetail from './pages/SessionDetail';
 
 import './App.css';
 
@@ -143,6 +146,41 @@ function AppRoutes() {
           </ProtectedRoute>
         }
       />
+
+      {/* Admin routes */}
+      <Route
+        path="/admin/overview"
+        element={
+          <ProtectedRoute>
+            <AdminOverview />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/admin/demand"
+        element={
+          <ProtectedRoute>
+            <DemandAnalytics />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/admin/supply"
+        element={
+          <ProtectedRoute>
+            <SupplyAnalytics />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/admin/gaps"
+        element={
+          <ProtectedRoute>
+            <GapAnalysis />
+          </ProtectedRoute>
+        }
+      />
+      <Route path="/admin" element={<Navigate to="/admin/overview" replace />} />
 
       {/* Catch-all: redirect unknown routes to landing */}
       <Route path="*" element={<Navigate to="/" replace />} />
