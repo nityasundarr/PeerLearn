@@ -10,6 +10,8 @@ import OfferToTutor from './pages/OfferToTutor';
 import ProfileSettings from './pages/ProfileSettings';
 import SessionMessaging from './pages/SessionMessaging';
 import FeedbackForm from './pages/FeedbackForm';
+import Complaints from './pages/Complaints';
+import PenaltyAppeal from './pages/PenaltyAppeal';
 
 // Pages - new auth pages
 import SignUp from './pages/SignUp';
@@ -127,6 +129,22 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <FeedbackForm />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/complaints"
+        element={
+          <ProtectedRoute>
+            <Complaints />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/appeal/:recordId"
+        element={
+          <ProtectedRoute>
+            <PenaltyAppeal />
           </ProtectedRoute>
         }
       />
