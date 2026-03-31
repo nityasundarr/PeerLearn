@@ -16,10 +16,10 @@ import DemandAnalytics from './pages/Admin/DemandAnalytics';
 import SupplyAnalytics from './pages/Admin/SupplyAnalytics';
 import GapAnalysis from './pages/Admin/GapAnalysis';
 
-// Pages - new ones you'll create (placeholder for now)
-// import SignUp from './pages/SignUp';
-// import VerifyEmail from './pages/VerifyEmail';
-// import ResetPassword from './pages/ResetPassword';
+// Pages - new auth pages
+import SignUp from './pages/SignUp';
+import VerifyEmail from './pages/VerifyEmail';
+import ResetPassword from './pages/ResetPassword';
 
 import './App.css';
 
@@ -74,9 +74,6 @@ function AppRoutes() {
           </PublicRoute>
         }
       />
-      {/* 
-      Uncomment these as you create the pages:
-      
       <Route
         path="/signup"
         element={
@@ -87,7 +84,6 @@ function AppRoutes() {
       />
       <Route path="/verify-email" element={<VerifyEmail />} />
       <Route path="/reset-password" element={<ResetPassword />} />
-      */}
 
       {/* Protected routes - require login */}
       <Route
