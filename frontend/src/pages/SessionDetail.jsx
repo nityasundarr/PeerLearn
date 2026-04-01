@@ -123,9 +123,14 @@ const SessionDetail = () => {
 
   const statusInfo = STATUS_STYLES[session?.status] || { bg: '#f5f5f4', color: '#57534e', label: session?.status || '—' };
 
-  const venue = session?.venue_manual
-    ? session.venue_manual
-    : (session?.venue_name || session?.venue?.name || '—');
+  const venueName = session?.venue_name || session?.venue?.name || null;
+  const venueAddress = session?.venue_address || null;
+  const venue = session?.venue_manual || venueName || '—';
+  // Address used for OneMap embed: prefer explicit address, fall back to venue name/manual text
+  const mapSearchVal = venueAddress || (session?.venue_manual ? session.venue_manual : venueName);
+  const oneMapEmbedUrl = mapSearchVal
+    ? `https://www.onemap.gov.sg/minimap/minimap.html?mapStyle=Default&zoomLevel=16&onLoad=1&addressSearched=${encodeURIComponent(mapSearchVal)}`
+    : null;
 
   const senderLabel = (msg) => {
     if (String(msg.sender_id) === String(user?.id)) return 'You';
@@ -210,6 +215,37 @@ const SessionDetail = () => {
                   </div>
                 ))}
               </div>
+
+              {/* OneMap venue embed */}
+              {oneMapEmbedUrl && (
+                <div style={{ marginTop: '20px' }}>
+                  <div style={{ fontSize: '13px', fontWeight: '600', color: '#57534e', marginBottom: '8px' }}>
+                    📍 Venue Location
+                  </div>
+                  {venueAddress && (
+                    <p style={{ margin: '0 0 8px', fontSize: '13px', color: '#78716c' }}>{venueAddress}</p>
+                  )}
+                  <div style={{ borderRadius: '12px', overflow: 'hidden', border: '1px solid #e7e5e4', height: '280px' }}>
+                    <iframe
+                      title="Venue Map"
+                      src={oneMapEmbedUrl}
+                      width="100%"
+                      height="280"
+                      style={{ border: 'none', display: 'block' }}
+                      allowFullScreen
+                      loading="lazy"
+                    />
+                  </div>
+                  <a
+                    href={`https://www.onemap.gov.sg/main/v2/?searchval=${encodeURIComponent(mapSearchVal)}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{ display: 'inline-block', marginTop: '8px', fontSize: '12px', color: '#1a5f4a', textDecoration: 'none' }}
+                  >
+                    Open in OneMap ↗
+                  </a>
+                </div>
+              )}
 
               {/* Action buttons */}
               {canLeaveFeedback && (
