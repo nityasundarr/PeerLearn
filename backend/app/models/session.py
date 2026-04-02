@@ -113,12 +113,15 @@ class SessionResponse(BaseModel):
     scheduled_at: str | None
     proposed_slots: list[dict]
     cancel_reason: str | None
+    fee: float | None = None
     created_at: str
     updated_at: str
     # Venue details resolved from venues table (venue_id sessions only)
     venue_name: str | None = None
     venue_address: str | None = None
-    # Optional fields from joined tutoring_requests and users (list_sessions)
+    venue_map_url: str | None = None
+    # Optional fields from joined tutoring_requests and users
+    tutor_name: str | None = None
     tutee_name: str | None = None
     subjects: list[str] | None = None
     topics: list[str] | None = None
@@ -126,6 +129,7 @@ class SessionResponse(BaseModel):
     urgency_category: str | None = None
     planning_areas: list[str] | None = None
     accessibility_notes: str | None = None
+    has_rating: bool = False
 
     @classmethod
     def from_db(cls, row: dict) -> "SessionResponse":
@@ -144,10 +148,13 @@ class SessionResponse(BaseModel):
             scheduled_at=str(row["scheduled_at"]) if row.get("scheduled_at") else None,
             proposed_slots=row.get("proposed_slots") or [],
             cancel_reason=row.get("cancel_reason"),
+            fee=float(row["fee"]) if row.get("fee") is not None else None,
             created_at=str(row.get("created_at", "")),
             updated_at=str(row.get("updated_at", "")),
             venue_name=row.get("venue_name"),
             venue_address=row.get("venue_address"),
+            venue_map_url=row.get("venue_map_url"),
+            tutor_name=row.get("tutor_name"),
             tutee_name=row.get("tutee_name"),
             subjects=row.get("subjects"),
             topics=row.get("topics"),
@@ -155,4 +162,5 @@ class SessionResponse(BaseModel):
             urgency_category=row.get("urgency_category"),
             planning_areas=row.get("planning_areas"),
             accessibility_notes=row.get("accessibility_notes"),
+            has_rating=bool(row.get("has_rating", False)),
         )

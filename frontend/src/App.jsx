@@ -18,6 +18,7 @@ import AdminOverview from './pages/Admin/Overview';
 import DemandAnalytics from './pages/Admin/DemandAnalytics';
 import SupplyAnalytics from './pages/Admin/SupplyAnalytics';
 import GapAnalysis from './pages/Admin/GapAnalysis';
+import { ComplaintsList, ComplaintDetail } from './pages/Admin/AdminComplaints';
 
 // Pages - new auth pages
 import SignUp from './pages/SignUp';
@@ -36,6 +37,26 @@ const ProtectedRoute = ({ children }) => {
 
   if (!user) {
     return <Navigate to="/login" replace />;
+  }
+
+  return children;
+};
+
+// Wrapper for /dashboard: admins are redirected to /admin/overview
+const DashboardRoute = ({ children }) => {
+  const { user, loading } = useAuth();
+
+  if (loading) {
+    return <div className="loading-screen">Loading...</div>;
+  }
+
+  if (!user) {
+    return <Navigate to="/login" replace />;
+  }
+
+  const roles = (Array.isArray(user.roles) ? user.roles : []).map((r) => String(r).toLowerCase());
+  if (roles.includes('admin')) {
+    return <Navigate to="/admin/overview" replace />;
   }
 
   return children;
@@ -92,9 +113,9 @@ function AppRoutes() {
       <Route
         path="/dashboard"
         element={
-          <ProtectedRoute>
+          <DashboardRoute>
             <Dashboard />
-          </ProtectedRoute>
+          </DashboardRoute>
         }
       />
       <Route
@@ -200,6 +221,22 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <GapAnalysis />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/admin/complaints"
+        element={
+          <ProtectedRoute>
+            <ComplaintsList />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/admin/complaints/:complaintId"
+        element={
+          <ProtectedRoute>
+            <ComplaintDetail />
           </ProtectedRoute>
         }
       />

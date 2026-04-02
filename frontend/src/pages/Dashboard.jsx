@@ -1551,7 +1551,7 @@ const Dashboard = () => {
     const filteredLearningSessions = learningSessions.filter((s) => learningTuteeBucket(s) === learningFilterTab);
     const pendingTabCount = learningSessions.filter((s) =>
       learningTuteeBucket(s) === 'pending',
-    ).length;
+    ).length + openTuteeRequests.length;
     // Sessions in pending that need action (slot to confirm or payment to make)
     const pendingActionCount = learningSessions.filter((s) => {
       const st = normalizeSessionStatus(s);
@@ -1585,7 +1585,39 @@ const Dashboard = () => {
         })}
       </div>
 
-      {filteredLearningSessions.length === 0 && (
+      {/* Open requests waiting for a tutor match — only shown in pending tab */}
+      {learningFilterTab === 'pending' && openTuteeRequests.map((req) => (
+        <div key={`req-${req.id || req.request_id}`} style={{
+          background: '#fffbeb',
+          borderRadius: '16px',
+          border: '1px solid #fde68a',
+          padding: '24px',
+          marginBottom: '16px',
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+            <div>
+              <div style={{ fontWeight: '700', fontSize: '16px', color: '#1c1917', marginBottom: '4px' }}>
+                {(req.subjects || []).join(', ') || '—'}
+              </div>
+              <div style={{ fontSize: '13px', color: '#78716c' }}>
+                {(req.topics || []).join(', ') || '—'}
+              </div>
+            </div>
+            <span style={{ background: '#fef3c7', color: '#92400e', border: '1px solid #fde68a', borderRadius: '20px', padding: '4px 12px', fontSize: '12px', fontWeight: '600', flexShrink: 0, marginLeft: '12px' }}>
+              🔍 Searching for Tutor
+            </span>
+          </div>
+          <div style={{ marginTop: '12px', fontSize: '13px', color: '#78716c' }}>
+            Your request is open and we're looking for a matching tutor. You'll be notified once a tutor is found.
+          </div>
+          <div style={{ marginTop: '8px', fontSize: '12px', color: '#a8a29e' }}>
+            Submitted {req.created_at ? formatDate(req.created_at) : ''}
+            {req.urgency_category && ` · ${getUrgency(req)}`}
+          </div>
+        </div>
+      ))}
+
+      {filteredLearningSessions.length === 0 && (learningFilterTab !== 'pending' || openTuteeRequests.length === 0) && (
         <div style={{ background: '#fff', borderRadius: '16px', border: '1px solid #e7e5e4', padding: '40px 24px', textAlign: 'center', color: '#57534e', marginBottom: '16px' }}>
           No sessions in this section.
         </div>
@@ -1772,7 +1804,7 @@ const Dashboard = () => {
             >
               💬 Message Tutor
             </button>
-            {tuteeSession.state === 'CONFIRMED' && tuteeSession.scheduled_at && new Date() > new Date(tuteeSession.scheduled_at) && (
+            {tuteeSession.state === 'COMPLETED' && !tuteeSession.has_rating && (
               <button
                 type="button"
                 onClick={() => navigate(`/feedback/${tuteeSession.id}`)}
@@ -2491,7 +2523,7 @@ const Dashboard = () => {
           <button onClick={() => setShowMessaging(true)} onMouseEnter={() => setHovered('detail-msg')} onMouseLeave={() => setHovered(null)} style={{ width: '100%', padding: '14px', background: hovered === 'detail-msg' ? '#2563eb' : '#3b82f6', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: '600', cursor: 'pointer', fontSize: '15px', transition: 'all 0.2s ease' }}>💬 Message Tutor</button>
           {activeTab === 'learning' && s.state === 'PENDING_CONFIRM' && <button onClick={() => openPaymentModal(s)} onMouseEnter={() => setHovered('detail-pay')} onMouseLeave={() => setHovered(null)} style={{ width: '100%', padding: '14px', background: hovered === 'detail-pay' ? '#16a34a' : '#22c55e', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: '600', cursor: 'pointer', fontSize: '15px', transition: 'all 0.2s ease' }}>💳 Pay Now</button>}
           {(s.state === 'CONFIRMED' || s.state === 'COMPLETED') && <button onClick={() => handleMarkOutcome(s.id, 'attended')} onMouseEnter={() => setHovered('detail-done')} onMouseLeave={() => setHovered(null)} style={{ width: '100%', padding: '14px', background: hovered === 'detail-done' ? '#16a34a' : '#22c55e', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: '600', cursor: 'pointer', fontSize: '15px', transition: 'all 0.2s ease' }}>✓ Mark as Completed</button>}
-          {(activeTab !== 'learning' || s.state !== 'CONFIRMED' || (s.scheduled_at && new Date() > new Date(s.scheduled_at))) && (
+          {s.state === 'COMPLETED' && !s.has_rating && (
           <button onClick={() => s.id && navigate(`/feedback/${s.id}`)} onMouseEnter={() => setHovered('detail-fb')} onMouseLeave={() => setHovered(null)} style={{ width: '100%', padding: '14px', background: hovered === 'detail-fb' ? '#d97706' : '#f59e0b', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: '600', cursor: 'pointer', fontSize: '15px', transition: 'all 0.2s ease' }}>⭐ Leave Feedback</button>
           )}
           {['tutor_accepted', 'pending_confirmation'].includes(s.status) && (

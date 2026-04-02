@@ -20,7 +20,7 @@ propose-slots: no state change (tutor stores proposed slots; tutee then confirms
 import logging
 
 from app.core.errors import ForbiddenError, NotFoundError, UnprocessableError
-from app.db import messaging_db, notifications_db, requests_db, sessions_db, venues_db
+from app.db import messaging_db, notifications_db, ratings_db, requests_db, sessions_db, venues_db
 from app.models.session import (
     CancelSessionBody,
     ConfirmSlotBody,
@@ -299,23 +299,61 @@ def set_venue(session_id: str, user_id: str, body: ConfirmVenueBody) -> SessionR
 # Read operations
 # ---------------------------------------------------------------------------
 
+def _inject_has_rating(row: dict) -> dict:
+    """Set has_rating=True on the row if a rating exists for this session."""
+    status = row.get("status", "")
+    if status not in ("completed_attended", "completed_no_show"):
+        return row
+    try:
+        rating = ratings_db.get_rating_by_session(row.get("id") or row.get("session_id", ""))
+        return {**row, "has_rating": rating is not None}
+    except Exception:
+        return row
+
+
 def list_sessions(
     user_id: str,
     role: str | None,
     status_group: str | None,
 ) -> list[SessionResponse]:
     rows = sessions_db.list_sessions(user_id, role, status_group)
-    return [SessionResponse.from_db(r) for r in rows]
+    return [SessionResponse.from_db(_inject_has_rating(r)) for r in rows]
+
+
+def _build_onemap_url(search_val: str) -> str:
+    """Build a OneMap minimap URL that geocodes and pins the given address/name."""
+    from urllib.parse import quote
+    encoded = quote(search_val, safe="")
+    return (
+        f"https://www.onemap.gov.sg/minimap/minimap.html"
+        f"?mapStyle=Default&zoomLevel=17&onLoad=1"
+        f"&addressSearched={encoded}"
+    )
 
 
 def _enrich_venue(row: dict) -> dict:
-    """Inject venue_name and venue_address into a session row if venue_id is set."""
+    """Inject venue_name, venue_address, and venue_map_url into a session row."""
     venue_id = row.get("venue_id")
+    venue_manual = row.get("venue_manual")
+
     if venue_id:
         try:
-            venue = venues_db.get_venue_by_id(venue_id)
+            venue = venues_db._get_venue_coords_by_id(venue_id)
             if venue:
-                row = {**row, "venue_name": venue.get("name"), "venue_address": venue.get("address")}
+                name = venue.get("name", "")
+                address = venue.get("address", "")
+                row = {**row, "venue_name": name, "venue_address": address}
+                # Use postal code if extractable (6 digits at end of address),
+                # otherwise name alone — OneMap recognises library/CC names well
+                import re
+                postal_match = re.search(r'\bS?(\d{6})\b', address)
+                search_val = postal_match.group(0) if postal_match else (name or address)
+                row = {**row, "venue_map_url": _build_onemap_url(search_val)}
+        except Exception:
+            pass
+    elif venue_manual:
+        try:
+            row = {**row, "venue_map_url": _build_onemap_url(venue_manual)}
         except Exception:
             pass
     return row
@@ -323,4 +361,4 @@ def _enrich_venue(row: dict) -> dict:
 
 def get_session(session_id: str, user_id: str) -> SessionResponse:
     row = _get_session_or_404(session_id, user_id)
-    return SessionResponse.from_db(_enrich_venue(row))
+    return SessionResponse.from_db(_inject_has_rating(_enrich_venue(row)))

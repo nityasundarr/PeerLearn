@@ -87,6 +87,25 @@ def get_venue_by_id(venue_id: str) -> dict | None:
         raise _db_error("get_venue_by_id", exc) from exc
 
 
+def _get_venue_coords_by_id(venue_id: str) -> dict | None:
+    """Return a single venue including lat/lng for internal map URL construction.
+
+    Hard Rule 10: INTERNAL USE ONLY — call only from session_service._enrich_venue.
+    Coordinates must never appear in any API response body.
+    """
+    try:
+        result = (
+            supabase.table("venues")
+            .select(_INTERNAL_COLS)
+            .eq("id", venue_id)
+            .maybe_single()
+            .execute()
+        )
+        return result.data if result is not None and result.data is not None else None
+    except Exception as exc:
+        raise _db_error("_get_venue_coords_by_id", exc) from exc
+
+
 # ---------------------------------------------------------------------------
 # Fallback: all venues (no lat/lng) — used when OneMap is unavailable
 # ---------------------------------------------------------------------------

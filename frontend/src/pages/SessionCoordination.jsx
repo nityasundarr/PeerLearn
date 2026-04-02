@@ -14,40 +14,54 @@ const formatHour = (h) => {
   return `${hour}:00 ${ampm}`;
 };
 
-// Step indicator — steps: 1 Slot, 2 Venue, 3 Payment, 4 Confirmed
-const StepIndicator = ({ currentStep }) => (
-  <div style={{ background: '#fff', padding: '24px 32px', borderBottom: '1px solid #e7e5e4' }}>
-    <div style={{ maxWidth: '640px', margin: '0 auto' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', position: 'relative' }}>
-        <div style={{ position: 'absolute', top: '18px', left: '40px', right: '40px', height: '4px', background: '#e7e5e4', zIndex: 1 }}>
-          <div style={{ width: `${((currentStep - 1) / 3) * 100}%`, height: '100%', background: '#1a5f4a', transition: 'width 0.3s' }} />
-        </div>
-        {[
-          { num: 1, label: 'Time Slot' },
-          { num: 2, label: 'Venue' },
-          { num: 3, label: 'Payment' },
-          { num: 4, label: 'Confirmed' },
-        ].map((step) => (
-          <div key={step.num} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', zIndex: 2, width: '80px' }}>
-            <div style={{
-              width: '36px', height: '36px', borderRadius: '50%',
-              background: currentStep >= step.num ? '#1a5f4a' : '#fff',
-              border: `3px solid ${currentStep >= step.num ? '#1a5f4a' : '#e7e5e4'}`,
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              color: currentStep >= step.num ? '#fff' : '#a8a29e',
-              fontWeight: '600', fontSize: '14px', marginBottom: '8px',
-            }}>
-              {currentStep > step.num ? '✓' : step.num}
-            </div>
-            <span style={{ fontSize: '11px', fontWeight: currentStep === step.num ? '600' : '400', color: currentStep >= step.num ? '#1c1917' : '#a8a29e', textAlign: 'center' }}>
-              {step.label}
-            </span>
+// Full journey steps: tutee request (1-3 complete) + coordination (4-7)
+const ALL_STEPS = [
+  { num: 1, label: 'Details' },
+  { num: 2, label: 'Schedule' },
+  { num: 3, label: 'Tutor' },
+  { num: 4, label: 'Time Slot' },
+  { num: 5, label: 'Venue' },
+  { num: 6, label: 'Payment' },
+  { num: 7, label: 'Confirmed' },
+];
+
+// coordStep 1-4 maps to overall step 4-7
+const StepIndicator = ({ currentStep }) => {
+  const overallStep = currentStep + 3;
+  return (
+    <div style={{ background: '#fff', padding: '24px 32px', borderBottom: '1px solid #e7e5e4' }}>
+      <div style={{ maxWidth: '800px', margin: '0 auto' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', position: 'relative' }}>
+          <div style={{ position: 'absolute', top: '18px', left: '24px', right: '24px', height: '4px', background: '#e7e5e4', zIndex: 1 }}>
+            <div style={{ width: `${((overallStep - 1) / 6) * 100}%`, height: '100%', background: '#1a5f4a', transition: 'width 0.3s' }} />
           </div>
-        ))}
+          {ALL_STEPS.map((step) => {
+            const done = overallStep > step.num;
+            const active = overallStep === step.num;
+            const past = step.num <= 3; // tutee request steps always complete
+            return (
+              <div key={step.num} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', zIndex: 2, width: '48px' }}>
+                <div style={{
+                  width: '32px', height: '32px', borderRadius: '50%',
+                  background: done || past || active ? '#1a5f4a' : '#fff',
+                  border: `3px solid ${done || past || active ? '#1a5f4a' : '#e7e5e4'}`,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  color: done || past || active ? '#fff' : '#a8a29e',
+                  fontWeight: '600', fontSize: '13px', marginBottom: '6px',
+                }}>
+                  {done || past ? '✓' : step.num}
+                </div>
+                <span style={{ fontSize: '10px', fontWeight: active ? '700' : '400', color: done || past || active ? '#1c1917' : '#a8a29e', textAlign: 'center', lineHeight: '1.2' }}>
+                  {step.label}
+                </span>
+              </div>
+            );
+          })}
+        </div>
       </div>
     </div>
-  </div>
-);
+  );
+};
 
 const SessionCoordination = () => {
   const { sessionId } = useParams();
@@ -76,6 +90,7 @@ const SessionCoordination = () => {
 
   // Step 3 — Payment state
   const [sessionFee, setSessionFee] = useState(null);
+  const [payMethod, setPayMethod] = useState(null); // 'paynow' | 'card' | 'bank'
   const [paySubmitting, setPaySubmitting] = useState(false);
   const [payError, setPayError] = useState(null);
 
@@ -199,6 +214,7 @@ const SessionCoordination = () => {
     setPayError(null);
     try {
       await api.post('/payments/initiate', { session_id: sessionId });
+      await loadSession(); // reload so session.fee is populated on step 4
       setCurrentStep(4);
     } catch (err) {
       setPayError(err.response?.data?.detail ?? 'Payment failed. Please try again.');
@@ -430,7 +446,7 @@ const SessionCoordination = () => {
         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '14px' }}>
             <span style={{ color: '#57534e' }}>Subject</span>
-            <span style={{ color: '#1c1917', fontWeight: '500' }}>{subjects}</span>
+            <span style={{ color: '#1c1917', fontWeight: '500' }}>{subjects}{topics ? ` · ${topics}` : ''}</span>
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '14px' }}>
             <span style={{ color: '#57534e' }}>Duration</span>
@@ -446,7 +462,15 @@ const SessionCoordination = () => {
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '14px' }}>
             <span style={{ color: '#57534e' }}>When</span>
-            <span style={{ color: '#1c1917', fontWeight: '500' }}>{session?.scheduled_at ? formatDate(session.scheduled_at) : '—'}</span>
+            <span style={{ color: '#1c1917', fontWeight: '500' }}>
+              {session?.scheduled_at ? (() => {
+                const dt = new Date(session.scheduled_at);
+                const endHour = dt.getHours() + (session.duration_hours || 1);
+                const endDt = new Date(dt);
+                endDt.setHours(endHour);
+                return `${formatDate(dt)}, ${formatHour(dt.getHours())} – ${formatHour(endHour)}`;
+              })() : '—'}
+            </span>
           </div>
         </div>
       </div>
@@ -474,6 +498,41 @@ const SessionCoordination = () => {
         <strong>Pricing by Level:</strong> Primary $15/hr · Secondary $18/hr · JC/Poly/ITE $22/hr · University $25/hr
       </div>
 
+      {/* Payment method selection */}
+      <div style={{ background: '#fff', borderRadius: '16px', border: '1px solid #e7e5e4', padding: '24px', marginBottom: '24px' }}>
+        <h3 style={{ fontSize: '16px', fontWeight: '600', marginBottom: '16px', color: '#1c1917' }}>Payment Method</h3>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+          {[
+            { key: 'paynow', icon: '📱', label: 'PayNow QR', desc: 'Scan QR code with your banking app' },
+            { key: 'card', icon: '💳', label: 'Credit / Debit Card', desc: 'Visa, Mastercard, Amex accepted' },
+            { key: 'bank', icon: '🏦', label: 'Bank Transfer', desc: 'Direct transfer via internet banking' },
+          ].map(({ key, icon, label, desc }) => {
+            const sel = payMethod === key;
+            return (
+              <button
+                key={key}
+                type="button"
+                onClick={() => setPayMethod(key)}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: '16px',
+                  padding: '14px 16px', borderRadius: '10px', cursor: 'pointer', textAlign: 'left',
+                  background: sel ? '#f0fdf4' : '#fff',
+                  border: `2px solid ${sel ? '#1a5f4a' : '#e7e5e4'}`,
+                  transition: 'all 0.15s ease',
+                }}
+              >
+                <span style={{ fontSize: '22px' }}>{icon}</span>
+                <div>
+                  <div style={{ fontWeight: '600', fontSize: '14px', color: '#1c1917' }}>{label}</div>
+                  <div style={{ fontSize: '12px', color: '#78716c', marginTop: '2px' }}>{desc}</div>
+                </div>
+                {sel && <span style={{ marginLeft: 'auto', color: '#1a5f4a', fontWeight: '700' }}>✓</span>}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
       {payError && (
         <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '8px', padding: '12px', marginBottom: '20px', fontSize: '14px', color: '#b91c1c' }}>{payError}</div>
       )}
@@ -491,15 +550,15 @@ const SessionCoordination = () => {
         <button
           type="button"
           onClick={handlePay}
-          disabled={paySubmitting || sessionFee === null}
+          disabled={paySubmitting || sessionFee === null || !payMethod}
           onMouseEnter={() => !paySubmitting && setHovered('pay-confirm')}
           onMouseLeave={() => setHovered(null)}
           style={{
             flex: 1, padding: '14px',
-            background: paySubmitting || sessionFee === null ? '#e7e5e4' : (hovered === 'pay-confirm' ? '#145040' : '#1a5f4a'),
-            color: paySubmitting || sessionFee === null ? '#a8a29e' : '#fff',
+            background: paySubmitting || sessionFee === null || !payMethod ? '#e7e5e4' : (hovered === 'pay-confirm' ? '#145040' : '#1a5f4a'),
+            color: paySubmitting || sessionFee === null || !payMethod ? '#a8a29e' : '#fff',
             border: 'none', borderRadius: '10px', fontWeight: '600', fontSize: '16px',
-            cursor: paySubmitting || sessionFee === null ? 'not-allowed' : 'pointer', transition: 'all 0.2s ease',
+            cursor: paySubmitting || sessionFee === null || !payMethod ? 'not-allowed' : 'pointer', transition: 'all 0.2s ease',
           }}
         >
           {paySubmitting ? 'Processing…' : `Pay ${sessionFee != null ? `$${Number(sessionFee).toFixed(2)}` : ''} →`}
@@ -529,6 +588,7 @@ const SessionCoordination = () => {
               { label: 'Duration', value: `${session?.duration_hours || 1}h` },
               { label: 'Venue', value: venueName },
               venueAddress && { label: 'Address', value: venueAddress },
+              session?.fee != null && { label: 'Amount Paid', value: `$${Number(session.fee).toFixed(2)}` },
             ].filter(Boolean).map(({ label, value }, i, arr) => (
               <div key={label} style={{ display: 'flex', justifyContent: 'space-between', padding: '12px 0', borderBottom: i < arr.length - 1 ? '1px solid #f5f5f4' : 'none' }}>
                 <span style={{ fontSize: '13px', color: '#a8a29e' }}>{label}</span>
@@ -542,21 +602,21 @@ const SessionCoordination = () => {
       <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
         <button
           type="button"
-          onClick={() => navigate(`/session/${sessionId}`)}
-          onMouseEnter={() => setHovered('conf-chat')}
-          onMouseLeave={() => setHovered(null)}
-          style={{ width: '100%', padding: '16px', background: hovered === 'conf-chat' ? '#2d7a61' : '#1a5f4a', color: '#fff', border: 'none', borderRadius: '12px', fontWeight: '600', cursor: 'pointer', fontSize: '16px', transition: 'all 0.2s ease' }}
-        >
-          💬 Message Tutor
-        </button>
-        <button
-          type="button"
           onClick={() => navigate('/dashboard')}
           onMouseEnter={() => setHovered('conf-dash')}
           onMouseLeave={() => setHovered(null)}
-          style={{ width: '100%', padding: '14px', background: hovered === 'conf-dash' ? '#f0faf5' : '#fff', color: '#57534e', border: `1px solid ${hovered === 'conf-dash' ? '#1a5f4a' : '#e7e5e4'}`, borderRadius: '12px', fontWeight: '500', cursor: 'pointer', transition: 'all 0.2s ease' }}
+          style={{ width: '100%', padding: '16px', background: hovered === 'conf-dash' ? '#2d7a61' : '#1a5f4a', color: '#fff', border: 'none', borderRadius: '12px', fontWeight: '600', cursor: 'pointer', fontSize: '16px', transition: 'all 0.2s ease' }}
         >
-          ← Back to Dashboard
+          Go to Dashboard →
+        </button>
+        <button
+          type="button"
+          onClick={() => navigate(`/session/${sessionId}`)}
+          onMouseEnter={() => setHovered('conf-chat')}
+          onMouseLeave={() => setHovered(null)}
+          style={{ width: '100%', padding: '14px', background: hovered === 'conf-chat' ? '#f0faf5' : '#fff', color: '#57534e', border: `1px solid ${hovered === 'conf-chat' ? '#1a5f4a' : '#e7e5e4'}`, borderRadius: '12px', fontWeight: '500', cursor: 'pointer', transition: 'all 0.2s ease' }}
+        >
+          💬 Message Tutor
         </button>
       </div>
     </div>
@@ -599,8 +659,7 @@ const SessionCoordination = () => {
         </button>
       </header>
 
-      {/* Step indicator — hide on confirmed step */}
-      {currentStep < 4 && <StepIndicator currentStep={currentStep} />}
+      <StepIndicator currentStep={currentStep} />
 
       {/* Step content */}
       {currentStep === 1 && renderStep1()}
