@@ -46,15 +46,16 @@ def submit_complaint(
     )
 
     # Notify all admins
+    complaint_id = row.get("id", "")
     admin_ids = complaints_db.get_admin_user_ids()
     for admin_id in admin_ids:
         notifications_db.create_notification(
             user_id=admin_id,
-            notification_type="admin_alert",
+            notification_type="admin_complaint",
             title="New complaint submitted",
             content=(
                 f"A new complaint (category: {body.category}) has been submitted "
-                f"for session {body.session_id}."
+                f"for session {body.session_id}. [complaint:{complaint_id}]"
             ),
             is_mandatory=True,
         )

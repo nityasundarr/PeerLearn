@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import api from '../services/api';
 import { useAuth } from '../services/AuthContext';
@@ -19,31 +19,24 @@ const getInitials = (name) =>
   (name || '').split(' ').map((n) => n[0]).join('').toUpperCase().slice(0, 2);
 
 const STATUS_STYLES = {
-  scheduled:  { bg: '#ecfdf5', color: '#065f46', label: 'Scheduled' },
-  completed:  { bg: '#f0f9ff', color: '#0369a1', label: 'Completed' },
-  cancelled:  { bg: '#fef2f2', color: '#991b1b', label: 'Cancelled' },
-  pending:    { bg: '#fefce8', color: '#854d0e', label: 'Pending' },
-  in_progress:{ bg: '#f0fdf4', color: '#166534', label: 'In Progress' },
+  pending_tutor_selection: { bg: '#fefce8', color: '#854d0e', label: 'Awaiting Tutor' },
+  tutor_accepted:          { bg: '#f0fdf4', color: '#166534', label: 'Tutor Accepted' },
+  pending_confirmation:    { bg: '#eff6ff', color: '#1d4ed8', label: 'Pending Confirmation' },
+  confirmed:               { bg: '#ecfdf5', color: '#065f46', label: 'Confirmed' },
+  completed_attended:      { bg: '#f0f9ff', color: '#0369a1', label: 'Completed' },
+  completed_no_show:       { bg: '#fef2f2', color: '#991b1b', label: 'No Show' },
+  cancelled:               { bg: '#fef2f2', color: '#991b1b', label: 'Cancelled' },
 };
 
 const SessionDetail = () => {
   const { sessionId } = useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
-  const messagesEndRef = useRef(null);
 
   const [session, setSession] = useState(null);
   const [sessionLoading, setSessionLoading] = useState(true);
-
-  const [messages, setMessages] = useState([]);
-  const [isReadonly, setIsReadonly] = useState(false);
-  const [newMessage, setNewMessage] = useState('');
-  const [sending, setSending] = useState(false);
-  const [sendError, setSendError] = useState(null);
-  const [inputFocused, setInputFocused] = useState(false);
-  const [hoverSend, setHoverSend] = useState(false);
-  const [hoveredBubbleId, setHoveredBubbleId] = useState(null);
   const [hoverNav, setHoverNav] = useState(null);
+
 
   // ── Fetch session info ────────────────────────────────────────────────────
   const fetchSession = useCallback(async () => {
@@ -58,51 +51,7 @@ const SessionDetail = () => {
     }
   }, [sessionId]);
 
-  // ── Fetch messages (also updates is_readonly) ─────────────────────────────
-  const fetchMessages = useCallback(async () => {
-    if (!sessionId) return;
-    try {
-      const { data } = await api.get(`/sessions/${sessionId}/messages`);
-      const list = Array.isArray(data) ? data : (data?.messages ?? []);
-      const sorted = [...list].sort(
-        (a, b) => new Date(a.sent_at || a.created_at || 0) - new Date(b.sent_at || b.created_at || 0)
-      );
-      setMessages(sorted.map((m) => ({ ...m, id: m.message_id || m.id })));
-      setIsReadonly(data?.is_readonly ?? data?.channel?.is_readonly ?? false);
-      if (data?.session) setSession(data.session);
-    } catch {
-      setMessages([]);
-    }
-  }, [sessionId]);
-
   useEffect(() => { fetchSession(); }, [fetchSession]);
-
-  useEffect(() => {
-    fetchMessages();
-    const interval = setInterval(fetchMessages, 3000);
-    return () => clearInterval(interval);
-  }, [fetchMessages]);
-
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
-
-  // ── Send message ──────────────────────────────────────────────────────────
-  const handleSend = async () => {
-    const content = (newMessage || '').trim();
-    if (!content || isReadonly || sending) return;
-    setSendError(null);
-    setSending(true);
-    try {
-      await api.post(`/sessions/${sessionId}/messages`, { content });
-      setNewMessage('');
-      await fetchMessages();
-    } catch (err) {
-      setSendError(err.response?.data?.detail ?? 'Failed to send');
-    } finally {
-      setSending(false);
-    }
-  };
 
   // ── Derived display values ────────────────────────────────────────────────
   const isTutor =
@@ -123,18 +72,18 @@ const SessionDetail = () => {
 
   const statusInfo = STATUS_STYLES[session?.status] || { bg: '#f5f5f4', color: '#57534e', label: session?.status || '—' };
 
-  const venue = session?.venue_manual
-    ? session.venue_manual
-    : (session?.venue_name || session?.venue?.name || '—');
+  const venueName = session?.venue_name || session?.venue?.name || null;
+  const venueAddress = session?.venue_address || null;
+  const venue = session?.venue_manual || venueName || (session?.venue_id ? 'Venue confirmed' : '—');
+  // Use server-computed map URL (includes lat/lng for DB venues, address-search for manual)
+  const oneMapEmbedUrl = session?.venue_map_url || null;
 
-  const senderLabel = (msg) => {
-    if (String(msg.sender_id) === String(user?.id)) return 'You';
-    if (String(msg.sender_id) === String(session?.tutor_id)) return tutorDisplayName;
-    if (String(msg.sender_id) === String(session?.tutee_id)) return tuteeDisplayName;
-    return isTutor ? tuteeDisplayName : tutorDisplayName;
-  };
+  const canLeaveFeedback = ['completed_attended', 'completed_no_show'].includes(session?.status) && !session?.has_rating;
 
-  const canLeaveFeedback = session?.status === 'completed';
+  // Show venue picker when session is active but no venue set yet
+  const venueSettableStates = new Set(['tutor_accepted', 'pending_confirmation']);
+  const hasVenue = !!(session?.venue_id || session?.venue_manual);
+  const needsVenue = venueSettableStates.has(session?.status) && !hasVenue;
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
@@ -203,13 +152,66 @@ const SessionDetail = () => {
                   { icon: '⏱', label: 'Duration', value: session.duration_hours ? `${session.duration_hours}h` : '—' },
                   { icon: '🎓', label: 'Level', value: session.academic_level || '—' },
                   { icon: '📍', label: 'Venue', value: venue },
-                ].map(({ icon, label, value }) => (
+                  session.fee != null ? { icon: '💰', label: 'Fee Paid', value: `$${Number(session.fee).toFixed(2)}` } : null,
+                ].filter(Boolean).map(({ icon, label, value }) => (
                   <div key={label} style={{ background: '#fafaf9', borderRadius: '10px', padding: '12px 16px' }}>
                     <div style={{ fontSize: '12px', color: '#a8a29e', marginBottom: '4px' }}>{icon} {label}</div>
                     <div style={{ fontSize: '14px', fontWeight: '600', color: '#1c1917', wordBreak: 'break-word' }}>{value}</div>
                   </div>
                 ))}
               </div>
+
+              {/* OneMap venue embed */}
+              {oneMapEmbedUrl && (
+                <div style={{ marginTop: '20px' }}>
+                  <div style={{ fontSize: '13px', fontWeight: '600', color: '#57534e', marginBottom: '8px' }}>
+                    📍 Venue Location
+                  </div>
+                  {venueAddress && (
+                    <p style={{ margin: '0 0 8px', fontSize: '13px', color: '#78716c' }}>{venueAddress}</p>
+                  )}
+                  <div style={{ borderRadius: '12px', overflow: 'hidden', border: '1px solid #e7e5e4', height: 'calc(100vh - 480px)', minHeight: '360px' }}>
+                    <iframe
+                      title="Venue Map"
+                      src={oneMapEmbedUrl}
+                      width="100%"
+                      height="100%"
+                      style={{ border: 'none', display: 'block' }}
+                      allowFullScreen
+                      loading="lazy"
+                    />
+                  </div>
+                  {(venueAddress || venueName || session?.venue_manual) && (
+                    <a
+                      href={`https://www.onemap.gov.sg/main/v2/?searchval=${encodeURIComponent(venueAddress || venueName || session?.venue_manual || '')}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{ display: 'inline-block', marginTop: '8px', fontSize: '12px', color: '#1a5f4a', textDecoration: 'none' }}
+                    >
+                      Open in OneMap ↗
+                    </a>
+                  )}
+                </div>
+              )}
+
+              {/* ── Continue Setup Banner ── */}
+              {needsVenue && (
+                <div style={{ marginTop: '24px', background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '14px', padding: '20px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
+                  <div>
+                    <div style={{ fontWeight: '700', fontSize: '15px', color: '#14532d' }}>📍 Session setup in progress</div>
+                    <div style={{ fontSize: '13px', color: '#166534', marginTop: '4px' }}>Choose a venue and complete payment to confirm your session.</div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => navigate(`/session/${sessionId}/coordinate`)}
+                    onMouseEnter={() => setHoverNav('setup')}
+                    onMouseLeave={() => setHoverNav(null)}
+                    style={{ background: hoverNav === 'setup' ? '#145040' : '#1a5f4a', color: '#fff', border: 'none', borderRadius: '10px', padding: '10px 20px', fontSize: '14px', fontWeight: '600', cursor: 'pointer', whiteSpace: 'nowrap' }}
+                  >
+                    Continue Setup →
+                  </button>
+                </div>
+              )}
 
               {/* Action buttons */}
               {canLeaveFeedback && (
@@ -236,128 +238,6 @@ const SessionDetail = () => {
               )}
             </div>
 
-            {/* ── Messaging Panel ── */}
-            <div style={{ background: '#fff', borderRadius: '16px', border: '1px solid #e7e5e4', overflow: 'hidden', display: 'flex', flexDirection: 'column', height: '520px' }}>
-              {/* Chat header */}
-              <div style={{ padding: '16px 24px', borderBottom: '1px solid #e7e5e4', display: 'flex', alignItems: 'center', gap: '12px' }}>
-                <div style={{ width: '40px', height: '40px', background: '#f59e0b', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 'bold' }}>
-                  {getInitials(otherName)}
-                </div>
-                <div>
-                  <div style={{ fontWeight: '600', color: '#1c1917', fontSize: '15px' }}>Chat with {otherName}</div>
-                  <div style={{ fontSize: '12px', color: '#a8a29e' }}>{subjects}{topics ? ` • ${topics}` : ''}</div>
-                </div>
-              </div>
-
-              {/* Read-only banner */}
-              {isReadonly && (
-                <div style={{ padding: '10px 24px', background: '#fef3c7', borderBottom: '1px solid #fde68a', fontSize: '13px', color: '#92400e', textAlign: 'center' }}>
-                  This conversation is read-only — the session has ended.
-                </div>
-              )}
-
-              {/* Messages */}
-              <div style={{ flex: 1, overflowY: 'auto', padding: '20px 24px', background: '#fafaf9' }}>
-                {messages.length === 0 && (
-                  <div style={{ textAlign: 'center', color: '#a8a29e', fontSize: '14px', paddingTop: '32px' }}>
-                    No messages yet. Start the conversation!
-                  </div>
-                )}
-                {messages.map((msg) => {
-                  const isMe = String(msg.sender_id) === String(user?.id);
-                  const bubbleKey = msg.id || msg.message_id;
-                  const ts = msg.sent_at || msg.created_at;
-                  const bubbleHover = hoveredBubbleId === bubbleKey;
-                  return (
-                    <div
-                      key={bubbleKey}
-                      style={{ display: 'flex', marginBottom: '14px', flexDirection: 'column', alignItems: isMe ? 'flex-end' : 'flex-start' }}
-                    >
-                      <div style={{ maxWidth: '72%', display: 'flex', flexDirection: 'column', alignItems: isMe ? 'flex-end' : 'flex-start' }}>
-                        <div style={{ fontSize: '11px', color: '#78716c', marginBottom: '4px' }}>
-                          <span style={{ fontWeight: '600', color: '#57534e' }}>{senderLabel(msg)}</span>
-                          <span style={{ margin: '0 5px', color: '#d6d3d1' }}>·</span>
-                          <span>{formatTime(ts)}</span>
-                        </div>
-                        <div
-                          role="presentation"
-                          onMouseEnter={() => setHoveredBubbleId(bubbleKey)}
-                          onMouseLeave={() => setHoveredBubbleId(null)}
-                          style={{
-                            background: isMe ? '#1a5f4a' : '#f5f5f4',
-                            padding: '10px 14px',
-                            borderRadius: isMe ? '12px 12px 4px 12px' : '12px 12px 12px 4px',
-                            boxShadow: bubbleHover ? '0 2px 8px rgba(0,0,0,0.12)' : (isMe ? '0 1px 2px rgba(26,95,74,0.15)' : '0 1px 2px rgba(0,0,0,0.06)'),
-                            transition: 'box-shadow 0.2s ease',
-                          }}
-                        >
-                          <p style={{ fontSize: '14px', color: isMe ? '#fff' : '#1c1917', margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
-                            {msg.content}
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-                <div ref={messagesEndRef} />
-              </div>
-
-              {/* Input */}
-              <div style={{ padding: '14px 24px', borderTop: '1px solid #e7e5e4', background: '#fff' }}>
-                {sendError && (
-                  <p style={{ color: '#ef4444', fontSize: '13px', margin: '0 0 8px' }}>{sendError}</p>
-                )}
-                <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-end' }}>
-                  <div
-                    style={{
-                      flex: 1,
-                      background: '#f5f5f4',
-                      borderRadius: '12px',
-                      padding: '10px 14px',
-                      opacity: isReadonly ? 0.7 : 1,
-                      border: inputFocused ? '1px solid #1a5f4a' : '1px solid transparent',
-                      transition: 'border 0.2s ease',
-                    }}
-                  >
-                    <textarea
-                      rows={1}
-                      placeholder={isReadonly ? 'Messaging is disabled' : 'Type a message…'}
-                      value={newMessage}
-                      onChange={(e) => setNewMessage(e.target.value)}
-                      onFocus={() => setInputFocused(true)}
-                      onBlur={() => setInputFocused(false)}
-                      onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
-                      disabled={isReadonly}
-                      style={{ width: '100%', border: 'none', background: 'transparent', fontSize: '14px', resize: 'none', outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box' }}
-                    />
-                  </div>
-                  <button
-                    type="button"
-                    onClick={handleSend}
-                    disabled={!newMessage.trim() || isReadonly || sending}
-                    onMouseEnter={() => setHoverSend(true)}
-                    onMouseLeave={() => setHoverSend(false)}
-                    style={{
-                      width: '44px',
-                      height: '44px',
-                      background: newMessage.trim() && !isReadonly ? (hoverSend ? '#145040' : '#1a5f4a') : '#e7e5e4',
-                      color: newMessage.trim() && !isReadonly ? '#fff' : '#a8a29e',
-                      border: 'none',
-                      borderRadius: '10px',
-                      cursor: newMessage.trim() && !isReadonly && !sending ? 'pointer' : 'not-allowed',
-                      fontSize: '18px',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      opacity: sending ? 0.7 : 1,
-                      transition: 'all 0.2s ease',
-                    }}
-                  >
-                    ➤
-                  </button>
-                </div>
-              </div>
-            </div>
           </>
         )}
       </div>

@@ -105,8 +105,13 @@ def get_rating_by_session(session_id: str) -> dict | None:
             .maybe_single()
             .execute()
         )
+        if result is None or result.data is None:
+            return None
         return result.data
     except Exception as exc:
+        error_str = str(exc)
+        if "204" in error_str or "Missing response" in error_str:
+            return None
         raise _db_error("get_rating_by_session", exc) from exc
 
 

@@ -20,7 +20,7 @@ propose-slots: no state change (tutor stores proposed slots; tutee then confirms
 import logging
 
 from app.core.errors import ForbiddenError, NotFoundError, UnprocessableError
-from app.db import messaging_db, notifications_db, requests_db, sessions_db
+from app.db import messaging_db, notifications_db, ratings_db, requests_db, sessions_db, venues_db
 from app.models.session import (
     CancelSessionBody,
     ConfirmSlotBody,
@@ -299,15 +299,117 @@ def set_venue(session_id: str, user_id: str, body: ConfirmVenueBody) -> SessionR
 # Read operations
 # ---------------------------------------------------------------------------
 
+def _inject_has_rating(row: dict) -> dict:
+    """Set has_rating=True on the row if a rating exists for this session."""
+    status = row.get("status", "")
+    if status not in ("completed_attended", "completed_no_show"):
+        return row
+    try:
+        rating = ratings_db.get_rating_by_session(row.get("id") or row.get("session_id", ""))
+        return {**row, "has_rating": rating is not None}
+    except Exception:
+        return row
+
+
 def list_sessions(
     user_id: str,
     role: str | None,
     status_group: str | None,
 ) -> list[SessionResponse]:
     rows = sessions_db.list_sessions(user_id, role, status_group)
-    return [SessionResponse.from_db(r) for r in rows]
+    return [SessionResponse.from_db(_inject_has_rating(r)) for r in rows]
+
+
+def _geocode_onemap(search_val: str) -> tuple[float | None, float | None]:
+    """Call OneMap Search API to get lat/lng for a postal code or address string.
+
+    Returns (lat, lng) within Singapore bounds, or (None, None) on failure.
+    Uses a 4-second timeout so a slow/down OneMap API doesn't stall the request.
+    """
+    import json
+    import urllib.request
+    from urllib.parse import quote as urlquote
+
+    try:
+        api_url = (
+            "https://www.onemap.gov.sg/api/common/elastic/search"
+            f"?searchVal={urlquote(search_val, safe='')}"
+            "&returnGeom=Y&getAddrDetails=Y&pageNum=1"
+        )
+        req = urllib.request.Request(api_url, headers={"User-Agent": "PeerLearn/1.0"})
+        with urllib.request.urlopen(req, timeout=4) as resp:
+            data = json.loads(resp.read().decode())
+        results = data.get("results") or []
+        if results:
+            lat = float(results[0].get("LATITUDE") or 0)
+            # OneMap has a known typo "LONGTITUDE" in some versions
+            lng = float(
+                results[0].get("LONGITUDE") or results[0].get("LONGTITUDE") or 0
+            )
+            # Sanity-check: Singapore bounding box
+            if 1.1 < lat < 1.5 and 103.5 < lng < 104.1:
+                return lat, lng
+    except Exception:
+        pass
+    return None, None
+
+
+def _build_onemap_url(search_val: str, name: str = "", address: str = "") -> str:
+    """Geocode search_val via OneMap API and return a minimap embed URL with a pin.
+
+    Falls back to addressSearched (no guaranteed pin, but centres the map) if
+    geocoding fails or returns out-of-bounds coordinates.
+    """
+    from urllib.parse import quote as urlquote
+
+    lat, lng = _geocode_onemap(search_val)
+    if lat and lng:
+        h_line = urlquote((name or search_val)[:40], safe="")
+        l_line = urlquote((address or "")[:60], safe="")
+        return (
+            "https://www.onemap.gov.sg/minimap/minimap.html"
+            f"?mapStyle=Default&zoomLevel=17&onLoad=1"
+            f"&marker=true&lat={lat}&lng={lng}"
+            f"&popupWidth=200&popupHeight=50"
+            f"&markerHLine={h_line}&markerLLine={l_line}"
+        )
+    # Fallback — centres map on the address but may not show a pin
+    return (
+        "https://www.onemap.gov.sg/minimap/minimap.html"
+        f"?mapStyle=Default&zoomLevel=17&onLoad=1"
+        f"&addressSearched={urlquote(search_val, safe='')}"
+    )
+
+
+def _enrich_venue(row: dict) -> dict:
+    """Inject venue_name, venue_address, and venue_map_url into a session row."""
+    import re
+
+    venue_id = row.get("venue_id")
+    venue_manual = row.get("venue_manual")
+
+    if venue_id:
+        try:
+            venue = venues_db._get_venue_coords_by_id(venue_id)
+            if venue:
+                name = venue.get("name", "") or ""
+                address = venue.get("address", "") or ""
+                row = {**row, "venue_name": name, "venue_address": address}
+                # Use just the 6-digit postal code (group 1, no S prefix) so
+                # OneMap geocoding is as precise as possible.
+                postal_match = re.search(r'\bS?(\d{6})\b', address)
+                search_val = postal_match.group(1) if postal_match else (name or address)
+                row = {**row, "venue_map_url": _build_onemap_url(search_val, name=name, address=address)}
+        except Exception:
+            pass
+    elif venue_manual:
+        try:
+            row = {**row, "venue_map_url": _build_onemap_url(venue_manual, name=venue_manual)}
+        except Exception:
+            pass
+    return row
 
 
 def get_session(session_id: str, user_id: str) -> SessionResponse:
     row = _get_session_or_404(session_id, user_id)
-    return SessionResponse.from_db(row)
+    return SessionResponse.from_db(_inject_has_rating(_enrich_venue(row)))

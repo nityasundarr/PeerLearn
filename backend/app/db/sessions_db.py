@@ -28,7 +28,10 @@ logger = logging.getLogger(__name__)
 _SESSION_COLS = (
     "id, request_id, tutee_id, tutor_id, status, duration_hours, academic_level, "
     "venue_id, venue_manual, scheduled_at, proposed_slots, cancel_reason, fee, "
-    "outcome_tutor, outcome_tutee, created_at, updated_at"
+    "outcome_tutor, outcome_tutee, created_at, updated_at, "
+    "tutoring_requests!request_id(subjects, topics, time_slots, urgency_category, planning_areas, accessibility_notes), "
+    "tutor:users!tutor_id(full_name), "
+    "tutee:users!tutee_id(full_name)"
 )
 
 _STATUS_GROUPS: dict[str, list[str]] = {
@@ -101,7 +104,9 @@ def get_session(session_id: str) -> dict | None:
             .maybe_single()
             .execute()
         )
-        return result.data if result is not None and result.data is not None else None
+        if result is None or result.data is None:
+            return None
+        return _flatten_session_row(result.data)
     except Exception as exc:
         error_str = str(exc)
         if "204" in error_str or "Missing response" in error_str:
@@ -147,6 +152,13 @@ _LIST_SESSIONS_SELECT = """
     ),
     tutee:users!tutee_id(
         full_name
+    ),
+    tutor:users!tutor_id(
+        full_name
+    ),
+    venue_obj:venues!venue_id(
+        name,
+        address
     )
 """
 
@@ -174,8 +186,19 @@ def _flatten_session_row(row: dict) -> dict:
         flat["tutee_name"] = tutee.get("full_name")
     else:
         flat["tutee_name"] = None
+    tutor = row.get("tutor")
+    if isinstance(tutor, dict):
+        flat["tutor_name"] = tutor.get("full_name")
+    else:
+        flat["tutor_name"] = None
+    venue_obj = row.get("venue_obj")
+    if isinstance(venue_obj, dict):
+        flat.setdefault("venue_name", venue_obj.get("name"))
+        flat.setdefault("venue_address", venue_obj.get("address"))
     flat.pop("tutoring_requests", None)
     flat.pop("tutee", None)
+    flat.pop("tutor", None)
+    flat.pop("venue_obj", None)
     return flat
 
 

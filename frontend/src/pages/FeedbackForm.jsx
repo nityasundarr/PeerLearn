@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import api from '../services/api';
+import { useAuth } from '../services/AuthContext';
 
 // ============================================================
 // SECTION 5: SESSION FEEDBACK FORM (UPDATED)
@@ -13,7 +14,10 @@ import api from '../services/api';
 const TRAIT_OPTIONS = ['Patient', 'Clear explanations', 'Well prepared', 'Encouraging', 'Good examples', 'Thorough'];
 
 // Stable component at module level to prevent remount-on-typing (which caused scroll-to-top)
-const FeedbackNavHeader = ({ hovered, setHovered }) => (
+const getInitials = (name) =>
+  (name || '').split(' ').map((n) => n[0]).join('').toUpperCase().slice(0, 2) || '?';
+
+const FeedbackNavHeader = ({ hovered, setHovered, user }) => (
   <header style={{ background: 'linear-gradient(135deg, #1a5f4a 0%, #0d3d2e 100%)', padding: '0 32px', height: '72px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
     <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
       <div style={{ width: '40px', height: '40px', background: '#f59e0b', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 'bold', fontSize: '20px' }}>P</div>
@@ -24,12 +28,11 @@ const FeedbackNavHeader = ({ hovered, setHovered }) => (
         <button key={i} onMouseEnter={() => setHovered(`nav-${i}`)} onMouseLeave={() => setHovered(null)} style={{ background: hovered === `nav-${i}` ? 'rgba(255,255,255,0.1)' : 'transparent', border: 'none', padding: '10px 20px', borderRadius: '8px', color: '#fff', fontSize: '15px', fontWeight: '500', cursor: 'pointer', transition: 'all 0.15s ease' }}>{item}</button>
       ))}
     </nav>
-    <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-      <button onMouseEnter={() => setHovered('bell')} onMouseLeave={() => setHovered(null)} style={{ background: hovered === 'bell' ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.1)', border: 'none', width: '44px', height: '44px', borderRadius: '10px', cursor: 'pointer', fontSize: '20px', transition: 'all 0.15s ease' }}>🔔</button>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', background: 'rgba(255,255,255,0.2)', padding: '6px 14px 6px 6px', borderRadius: '10px' }}>
-        <div style={{ width: '34px', height: '34px', background: '#f59e0b', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 'bold', fontSize: '14px' }}>JD</div>
-        <span style={{ color: '#fff', fontSize: '14px', fontWeight: '500' }}>John Doe</span>
+    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', background: 'rgba(255,255,255,0.2)', padding: '6px 14px 6px 6px', borderRadius: '10px' }}>
+      <div style={{ width: '34px', height: '34px', background: '#f59e0b', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 'bold', fontSize: '14px' }}>
+        {getInitials(user?.full_name)}
       </div>
+      <span style={{ color: '#fff', fontSize: '14px', fontWeight: '500' }}>{user?.full_name || 'User'}</span>
     </div>
   </header>
 );
@@ -49,10 +52,13 @@ const formatTime = (d) => {
 const FeedbackForm = () => {
   const { sessionId } = useParams();
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [session, setSession] = useState(null);
   const [alreadyRated, setAlreadyRated] = useState(false);
   const [rating, setRating] = useState(0);
   const [hoveredRating, setHoveredRating] = useState(0);
+  const [aspectRatings, setAspectRatings] = useState({});
+  const [hoveredAspect, setHoveredAspect] = useState({ key: null, star: 0 });
   const [hovered, setHovered] = useState(null);
   const [reviewText, setReviewText] = useState('');
   const [traits, setTraits] = useState([]);
@@ -78,8 +84,21 @@ const FeedbackForm = () => {
     setError(null);
     setLoading(true);
     try {
+      // If session not yet completed, record tutee attendance first
+      if (session?.status === 'confirmed') {
+        await api.patch(`/sessions/${sessionId}/outcome`, { outcome: 'attended' });
+        // Refresh session to see if it moved to completed_attended
+        const { data: refreshed } = await api.get(`/sessions/${sessionId}`);
+        if (refreshed.status !== 'completed_attended' && refreshed.status !== 'completed_no_show') {
+          setSession(refreshed);
+          setError('Your attendance has been recorded. The session will be marked complete once your tutor confirms too. You can come back to leave a rating then.');
+          setLoading(false);
+          return;
+        }
+        setSession(refreshed);
+      }
       await api.post(`/sessions/${sessionId}/rating`, {
-        score: rating,
+        stars: rating,
         standout_traits: traits,
         review_text: reviewText || undefined,
       });
@@ -97,7 +116,13 @@ const FeedbackForm = () => {
     setLoading(true);
     try {
       await api.patch(`/sessions/${sessionId}/outcome`, { outcome: 'no_show' });
-      navigate('/dashboard');
+      const { data: refreshed } = await api.get(`/sessions/${sessionId}`);
+      setSession(refreshed);
+      if (refreshed.status === 'completed_attended' || refreshed.status === 'completed_no_show') {
+        navigate('/dashboard');
+      } else {
+        setError('Your response has been recorded. Waiting for the other party to confirm.');
+      }
     } catch (err) {
       setError(err.response?.data?.detail ?? err.message ?? 'Failed to update');
     } finally {
@@ -121,7 +146,7 @@ const FeedbackForm = () => {
       background: '#fafaf9',
       fontFamily: 'system-ui, -apple-system, sans-serif',
     }}>
-      <FeedbackNavHeader />
+      <FeedbackNavHeader hovered={hovered} setHovered={setHovered} user={user} />
       <div style={{
         display: 'flex',
         alignItems: 'center',
@@ -195,6 +220,8 @@ const FeedbackForm = () => {
                 style={{
                   background: 'transparent',
                   border: 'none',
+                  padding: '0 2px',
+                  lineHeight: '1',
                   fontSize: '40px',
                   cursor: alreadyRated ? 'default' : 'pointer',
                   transition: 'transform 0.1s',
@@ -225,26 +252,47 @@ const FeedbackForm = () => {
             { label: 'Communication', emoji: '💬' },
             { label: 'Punctuality', emoji: '⏰' },
             { label: 'Helpfulness', emoji: '🤝' },
-          ].map((aspect, i) => (
-            <div key={i} style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              padding: '12px 0',
-              borderBottom: i < 3 ? '1px solid #e7e5e4' : 'none',
-            }}>
-              <span style={{ fontSize: '14px', color: '#57534e' }}>
-                {aspect.emoji} {aspect.label}
-              </span>
-              <div style={{ display: 'flex', gap: '4px' }}>
-                {[1, 2, 3, 4, 5].map(star => (
-                  <span key={star} style={{ fontSize: '20px', cursor: 'pointer' }}>
-                    {star <= 4 ? '⭐' : '☆'}
-                  </span>
-                ))}
+          ].map((aspect, i) => {
+            const val = aspectRatings[aspect.label] || 0;
+            const hov = hoveredAspect.key === aspect.label ? hoveredAspect.star : 0;
+            return (
+              <div key={i} style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                padding: '12px 0',
+                borderBottom: i < 3 ? '1px solid #e7e5e4' : 'none',
+              }}>
+                <span style={{ fontSize: '14px', color: '#57534e' }}>
+                  {aspect.emoji} {aspect.label}
+                </span>
+                <div style={{ display: 'flex', gap: '2px' }}>
+                  {[1, 2, 3, 4, 5].map(star => (
+                    <button
+                      key={star}
+                      type="button"
+                      onClick={() => !alreadyRated && setAspectRatings(prev => ({ ...prev, [aspect.label]: star }))}
+                      onMouseEnter={() => !alreadyRated && setHoveredAspect({ key: aspect.label, star })}
+                      onMouseLeave={() => setHoveredAspect({ key: null, star: 0 })}
+                      disabled={alreadyRated}
+                      style={{
+                        background: 'transparent',
+                        border: 'none',
+                        padding: '0 1px',
+                        lineHeight: '1',
+                        fontSize: '20px',
+                        cursor: alreadyRated ? 'default' : 'pointer',
+                        transition: 'transform 0.1s',
+                        transform: (hov >= star || val >= star) ? 'scale(1.15)' : 'scale(1)',
+                      }}
+                    >
+                      {(hov >= star || val >= star) ? '⭐' : '☆'}
+                    </button>
+                  ))}
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
 
         {/* Tags */}

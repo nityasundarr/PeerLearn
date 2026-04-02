@@ -40,8 +40,10 @@ class SubmitRatingBody(BaseModel):
     def _review(cls, v: str | None) -> str | None:
         if v is None or v.strip() == "":
             return None
-        # SRS 2.9.4.5.3.3: [A-Za-z0-9 \-'], 1–500 chars
-        return validate_free_text(v.strip(), max_len=500)
+        v = v.strip()
+        if len(v) > 500:
+            raise ValueError("Review text must be 500 characters or fewer.")
+        return v
 
 
 # ---------------------------------------------------------------------------
