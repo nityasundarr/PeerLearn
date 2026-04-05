@@ -22,7 +22,7 @@ UC-6.5 rating rules:
 import logging
 
 from app.core.errors import ConflictError, ForbiddenError, NotFoundError, UnprocessableError
-from app.db import notifications_db, ratings_db, sessions_db
+from app.db import messaging_db, notifications_db, ratings_db, sessions_db
 from app.models.rating import OutcomeResponse, RatingResponse, RecordOutcomeBody, SubmitRatingBody
 from app.models.session import SessionResponse
 
@@ -86,6 +86,19 @@ def record_outcome(
     if not session:
         raise NotFoundError("Session not found or access denied.")
 
+    completed_statuses = {"completed_attended", "completed_no_show"}
+    if session["status"] in completed_statuses:
+        # Already finalised — return current state without error so the
+        # frontend can proceed to the rating step.
+        return OutcomeResponse(
+            session_id=session_id,
+            status=session["status"],
+            outcome_tutor=session.get("outcome_tutor"),
+            outcome_tutee=session.get("outcome_tutee"),
+            refund_status=None,
+            message="Session already completed.",
+        )
+
     if session["status"] != "confirmed":
         raise UnprocessableError(
             "Outcomes can only be recorded for sessions in 'confirmed' state."
@@ -117,6 +130,14 @@ def record_outcome(
     # Both reported — finalise
     new_status, refund_status, message = _determine_outcome(outcome_tutor, outcome_tutee)
     finalised = sessions_db.finalize_outcome(session_id, new_status)
+
+    # Lock the messaging channel now the session is terminal
+    try:
+        channel = messaging_db.get_channel_by_session(session_id)
+        if channel:
+            messaging_db.set_channel_readonly(channel["id"], True)
+    except Exception:
+        pass
 
     # Update tutor reliability metrics
     tutor_had_no_show = outcome_tutor == "no_show"

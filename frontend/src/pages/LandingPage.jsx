@@ -1144,37 +1144,6 @@ const LandingPage = () => {
             </form>
 
             {/* Divider */}
-            <div style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '16px',
-              marginBottom: '20px',
-            }}>
-              <div style={{ flex: 1, height: '1px', background: '#e7e5e4' }}></div>
-              <span style={{ color: '#a8a29e', fontSize: '14px' }}>or</span>
-              <div style={{ flex: 1, height: '1px', background: '#e7e5e4' }}></div>
-            </div>
-
-            {/* Google Signup Button */}
-            <button style={{
-              width: '100%',
-              padding: '14px',
-              background: '#ffffff',
-              color: '#1c1917',
-              border: '1px solid #e7e5e4',
-              borderRadius: '10px',
-              fontSize: '15px',
-              fontWeight: '500',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: '10px',
-            }}>
-              <span style={{ fontSize: '18px' }}>🔵</span>
-              Sign up with Google
-            </button>
-
             {/* Login Link */}
             <p style={{
               textAlign: 'center',

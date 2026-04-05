@@ -196,15 +196,42 @@ const mapSessionToIncomingRequest = (s) => {
   };
 };
 
-const mapNotificationToUi = (n) => ({
-  ...n,
-  id: n.id ?? n.notification_id,
-  icon: n.icon || '📩',
-  title: n.title || n.type || 'Notification',
-  message: n.message || n.body || n.content || '',
-  time: formatRelativeTime(n.created_at || n.sent_at),
-  unread: !n.is_read && !n.read,
-});
+const NOTIF_TYPE_META = {
+  penalty_issued:  { icon: '⚠️',  accent: '#ef4444', accentBg: '#fef2f2', borderColor: '#fca5a5' },
+  appeal_decided:  { icon: '⚖️',  accent: '#7c3aed', accentBg: '#f5f3ff', borderColor: '#c4b5fd' },
+  admin_alert:     { icon: '🔔',  accent: '#f59e0b', accentBg: '#fefce8', borderColor: '#fde68a' },
+  admin_appeal:    { icon: '📋',  accent: '#6366f1', accentBg: '#eef2ff', borderColor: '#c7d2fe' },
+  admin_complaint: { icon: '🚨',  accent: '#dc2626', accentBg: '#fef2f2', borderColor: '#fca5a5' },
+  session_update:  { icon: '📅',  accent: '#1a5f4a', accentBg: '#f0fdf4', borderColor: '#bbf7d0' },
+  new_request:     { icon: '🎓',  accent: '#1a5f4a', accentBg: '#f0fdf4', borderColor: '#bbf7d0' },
+  request_matched: { icon: '🎉',  accent: '#1a5f4a', accentBg: '#f0fdf4', borderColor: '#bbf7d0' },
+  payment_received:{ icon: '💳',  accent: '#059669', accentBg: '#ecfdf5', borderColor: '#6ee7b7' },
+  new_message:     { icon: '💬',  accent: '#3b82f6', accentBg: '#eff6ff', borderColor: '#93c5fd' },
+};
+
+const MODAL_NOTIF_TYPES = new Set(['penalty_issued', 'appeal_decided']);
+
+const stripTokens = (text) =>
+  (text || '').replace(/\[(record|complaint):[^\]]+\]/g, '').trim();
+
+const mapNotificationToUi = (n) => {
+  const type = String(n.notification_type || n.type || '').toLowerCase();
+  const meta = NOTIF_TYPE_META[type] || { icon: '📩', accent: '#1a5f4a', accentBg: '#f0fdf4', borderColor: '#bbf7d0' };
+  return {
+    ...n,
+    id: n.id ?? n.notification_id,
+    type,
+    icon: meta.icon,
+    accent: meta.accent,
+    accentBg: meta.accentBg,
+    borderColor: meta.borderColor,
+    title: n.title || n.type || 'Notification',
+    message: stripTokens(n.message || n.body || n.content || ''),
+    rawContent: n.message || n.body || n.content || '',
+    time: formatRelativeTime(n.created_at || n.sent_at),
+    unread: !n.is_read && !n.read,
+  };
+};
 
 const urgencyLabel = {
   exam_soon: '🔥 Exam Soon',
@@ -230,6 +257,10 @@ const ChatsTab = React.memo(function ChatsTab({
   const selectedSession = chatSessions.find(
     (s) => (s.id ?? s.session_id) === selectedChatSessionId,
   );
+  const TERMINAL_STATUSES = ['completed_attended', 'completed_no_show', 'cancelled'];
+  const isChatReadonly = selectedSession
+    ? TERMINAL_STATUSES.includes(normalizeSessionStatus(selectedSession))
+    : false;
 
   const getOtherPersonName = (s) => {
     if (!s) return 'Unknown';
@@ -396,6 +427,11 @@ const ChatsTab = React.memo(function ChatsTab({
           </div>
         </div>
 
+        {isChatReadonly && (
+          <div style={{ padding: '10px 24px', background: '#fef3c7', borderBottom: '1px solid #fde68a', fontSize: '13px', color: '#92400e', textAlign: 'center' }}>
+            This conversation is read-only. The session has been completed or cancelled.
+          </div>
+        )}
         <div style={{
           flex: 1, padding: '24px', overflowY: 'auto',
           background: '#fafaf9',
@@ -460,29 +496,31 @@ const ChatsTab = React.memo(function ChatsTab({
         <div style={{
           padding: '16px 24px', borderTop: '1px solid #e7e5e4',
           background: '#fff',
+          opacity: isChatReadonly ? 0.7 : 1,
         }}
         >
           <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-end' }}>
             <div style={{
               flex: 1, background: '#f5f5f4',
               borderRadius: '12px', padding: '12px 16px',
-              border: chatInputFocus ? '1px solid #1a5f4a' : '1px solid transparent',
+              border: !isChatReadonly && chatInputFocus ? '1px solid #1a5f4a' : '1px solid transparent',
               transition: 'border 0.15s ease',
             }}
             >
               <textarea
                 rows={1}
                 value={chatInput}
-                onChange={(e) => setChatInput(e.target.value)}
+                onChange={(e) => !isChatReadonly && setChatInput(e.target.value)}
                 onFocus={() => setChatInputFocus(true)}
                 onBlur={() => setChatInputFocus(false)}
                 onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !e.shiftKey) {
+                  if (!isChatReadonly && e.key === 'Enter' && !e.shiftKey) {
                     e.preventDefault();
                     handleSend();
                   }
                 }}
-                placeholder="Type a message... (Enter to send)"
+                disabled={isChatReadonly}
+                placeholder={isChatReadonly ? 'Messaging is disabled' : 'Type a message... (Enter to send)'}
                 style={{
                   width: '100%', border: 'none',
                   background: 'transparent', fontSize: '14px',
@@ -494,16 +532,17 @@ const ChatsTab = React.memo(function ChatsTab({
             <button
               type="button"
               onClick={handleSend}
-              disabled={!chatInput.trim()}
+              disabled={!chatInput.trim() || isChatReadonly}
               onMouseEnter={() => setHovered('chat-send')}
               onMouseLeave={() => setHovered(null)}
               style={{
                 width: '48px', height: '48px',
-                background: !chatInput.trim() ? '#e7e5e4'
+                background: !chatInput.trim() || isChatReadonly ? '#e7e5e4'
                   : hovered === 'chat-send' ? '#145040' : '#1a5f4a',
                 border: 'none', borderRadius: '12px',
-                cursor: chatInput.trim() ? 'pointer' : 'not-allowed',
-                color: '#fff', fontSize: '20px',
+                cursor: chatInput.trim() && !isChatReadonly ? 'pointer' : 'not-allowed',
+                color: !chatInput.trim() || isChatReadonly ? '#a8a29e' : '#fff',
+                fontSize: '20px',
                 display: 'flex', alignItems: 'center',
                 justifyContent: 'center',
                 transition: 'all 0.2s ease',
@@ -543,9 +582,13 @@ const Dashboard = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { user } = useAuth();
-  const [activeTab, setActiveTab] = useState('home');
-  const [learningFilterTab, setLearningFilterTab] = useState('upcoming');
-  const [tutoringFilterTab, setTutoringFilterTab] = useState('incoming');
+  const [activeTab, setActiveTab] = useState(location.state?.tab || 'home');
+  const [learningFilterTab, setLearningFilterTab] = useState(
+    location.state?.tab === 'learning' ? (location.state?.filterTab || 'upcoming') : 'upcoming'
+  );
+  const [tutoringFilterTab, setTutoringFilterTab] = useState(
+    location.state?.tab === 'tutoring' ? (location.state?.filterTab || 'incoming') : 'incoming'
+  );
   const [showDetailPanel, setShowDetailPanel] = useState(false);
   const [showMessaging, setShowMessaging] = useState(false);
   const [selectedSession, setSelectedSession] = useState(null);
@@ -562,6 +605,7 @@ const Dashboard = () => {
   const [slotsProposedSessionId, setSlotsProposedSessionId] = useState(null);
   const [tuteeSlotPick, setTuteeSlotPick] = useState({});
   const [sessionFees, setSessionFees] = useState({});
+  const [penaltyNotif, setPenaltyNotif] = useState(null); // unread penalty_issued notification to surface as modal
   const [paymentModalSession, setPaymentModalSession] = useState(null);
   const [paymentTab, setPaymentTab] = useState('paynow');
   const [paymentLoading, setPaymentLoading] = useState(false);
@@ -771,7 +815,11 @@ const Dashboard = () => {
     try {
       const { data } = await api.get('/notifications');
       const list = Array.isArray(data) ? data : (data.notifications || data.items || []);
-      setNotifications(list.map(mapNotificationToUi));
+      const mapped = list.map(mapNotificationToUi);
+      setNotifications(mapped);
+      // Surface the most recent unread mandatory notification as a modal (only if not already shown)
+      const urgent = mapped.find((n) => n.unread && MODAL_NOTIF_TYPES.has(n.type));
+      if (urgent) setPenaltyNotif((prev) => prev ?? urgent);
     } catch {
       setNotifications([]);
     }
@@ -840,6 +888,15 @@ const Dashboard = () => {
       fetchBadges();
     }
   }, [activeTab]);
+
+  // Poll notifications every 30s so logged-in users get penalty/appeal popups without refreshing
+  useEffect(() => {
+    const interval = setInterval(() => {
+      fetchNotifications();
+      fetchBadges();
+    }, 30000);
+    return () => clearInterval(interval);
+  }, []);
 
   useEffect(() => {
     if (activeTab !== 'chats') return;
@@ -1206,6 +1263,7 @@ const Dashboard = () => {
     if (t === 'payment_received' || t.includes('payment')) return 'View session →';
     if (t === 'new_message' || t.includes('message')) return 'View chat →';
     if (t === 'penalty_issued') return 'Appeal →';
+    if (t === 'appeal_decided') return 'View decision →';
     return 'View →';
   };
 
@@ -1247,15 +1305,15 @@ const Dashboard = () => {
     } else if (type === 'request_matched' || type.includes('incoming')) {
       setActiveTab('tutoring');
     } else if (type === 'penalty_issued') {
-      const match = String(notif?.content || notif?.message || '').match(/\[record:([^\]]+)\]/);
+      const raw = notif?.rawContent || notif?.content || notif?.message || '';
+      const match = String(raw).match(/\[record:([^\]]+)\]/);
       const recordId = match?.[1];
       if (recordId) {
-        navigate(`/appeal/${recordId}`, {
-          state: {
-            penalty_type: String(notif?.content || notif?.message || '').match(/A (\w+) has been issued/)?.[1] ?? null,
-          },
-        });
+        navigate(`/appeal/${recordId}`);
       }
+    } else if (type === 'appeal_decided') {
+      // Stay on notifications — details are visible in the notification body
+      setActiveTab('notifications');
     } else if (type.includes('complaint') || type.includes('appeal')) {
       // stay on notifications tab, do nothing
     } else {
@@ -1788,7 +1846,7 @@ const Dashboard = () => {
             </button>
             <button
               type="button"
-              onClick={() => navigate(`/session/${tuteeSession.id}/chat`)}
+              onClick={() => navigate(`/session/${tuteeSession.id}/chat`, { state: { tab: 'learning', filterTab: learningFilterTab } })}
               onMouseEnter={() => setHovered(`learn-msg-${tuteeSession.id}`)}
               onMouseLeave={() => setHovered(null)}
               style={{
@@ -2060,7 +2118,7 @@ const Dashboard = () => {
           <div style={{ display: 'flex', gap: '12px' }}>
             <button onClick={() => handleAccept(sid)} onMouseEnter={() => setHovered(`tutor-accept-${req.id}`)} onMouseLeave={() => setHovered(null)} style={{ flex: 1, padding: '14px', background: hovered === `tutor-accept-${req.id}` ? '#2d7a61' : '#1a5f4a', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: '600', cursor: 'pointer', fontSize: '15px', transition: 'all 0.2s ease' }}>✓ Accept Request</button>
             <button onClick={() => handleDecline(sid)} onMouseEnter={() => setHovered(`tutor-decline-${req.id}`)} onMouseLeave={() => setHovered(null)} style={{ flex: 1, padding: '14px', background: hovered === `tutor-decline-${req.id}` ? '#fef2f2' : '#fff', color: '#ef4444', border: `1px solid ${hovered === `tutor-decline-${req.id}` ? '#ef4444' : '#fecaca'}`, borderRadius: '10px', fontWeight: '500', cursor: 'pointer', fontSize: '15px', transition: 'all 0.2s ease' }}>✕ Decline</button>
-            <button onClick={() => navigate(`/session/${sid}/chat`)} onMouseEnter={() => setHovered(`tutor-msg-${req.id}`)} onMouseLeave={() => setHovered(null)} style={{ padding: '14px 24px', background: hovered === `tutor-msg-${req.id}` ? '#eff6ff' : '#fff', color: '#3b82f6', border: `1px solid ${hovered === `tutor-msg-${req.id}` ? '#3b82f6' : '#93c5fd'}`, borderRadius: '10px', fontWeight: '500', cursor: 'pointer', fontSize: '15px', transition: 'all 0.2s ease' }}>💬 Message</button>
+            <button onClick={() => navigate(`/session/${sid}/chat`, { state: { tab: 'tutoring', filterTab: tutoringFilterTab } })} onMouseEnter={() => setHovered(`tutor-msg-${req.id}`)} onMouseLeave={() => setHovered(null)} style={{ padding: '14px 24px', background: hovered === `tutor-msg-${req.id}` ? '#eff6ff' : '#fff', color: '#3b82f6', border: `1px solid ${hovered === `tutor-msg-${req.id}` ? '#3b82f6' : '#93c5fd'}`, borderRadius: '10px', fontWeight: '500', cursor: 'pointer', fontSize: '15px', transition: 'all 0.2s ease' }}>💬 Message Tutee</button>
           </div>
             );
           })()}
@@ -2113,7 +2171,7 @@ const Dashboard = () => {
                     <StatusBadge state={sess.state} />
                     <button
                       type="button"
-                      onClick={() => navigate(`/session/${sid}/chat`)}
+                      onClick={() => navigate(`/session/${sid}/chat`, { state: { tab: 'tutoring', filterTab: tutoringFilterTab } })}
                       onMouseEnter={() => setHovered(`tutor-msg-card-${cardHoverId}`)}
                       onMouseLeave={() => setHovered(null)}
                       style={{
@@ -2129,7 +2187,7 @@ const Dashboard = () => {
                         transition: 'all 0.2s ease',
                       }}
                     >
-                      💬 Message
+                      💬 Message Tutee
                     </button>
                     <button
                       type="button"
@@ -2163,74 +2221,151 @@ const Dashboard = () => {
   };
 
   // NOTIFICATIONS TAB
-  const NotificationsTab = () => (
+  const NOTIF_FILTERS = [
+    { label: 'All',       types: null },
+    { label: 'Sessions',  types: ['session_update', 'tutor_accepted', 'session_accepted', 'slot_proposed', 'request_matched', 'new_request'] },
+    { label: 'Payments',  types: ['payment_received'] },
+    { label: 'Messages',  types: ['new_message'] },
+    { label: 'Penalties', types: ['penalty_issued', 'appeal_decided', 'admin_alert'] },
+  ];
+
+  const handleDeleteNotification = async (notif) => {
+    const id = notif?.id ?? notif?.notification_id;
+    if (!id || id === 'undefined') return;
+    setNotifications((prev) => prev.filter((n) => (n.id ?? n.notification_id) !== id));
+    try {
+      await api.delete(`/notifications/${id}`);
+      fetchBadges();
+    } catch {
+      fetchNotifications();
+    }
+  };
+
+  const handleClearAllNotifications = async () => {
+    setNotifications([]);
+    try {
+      await api.delete('/notifications');
+      fetchBadges();
+    } catch {
+      fetchNotifications();
+    }
+  };
+
+  const NotificationsTab = () => {
+    const [notifFilter, setNotifFilter] = React.useState('All');
+    const activeFilterDef = NOTIF_FILTERS.find((f) => f.label === notifFilter);
+    const visibleNotifs = activeFilterDef?.types
+      ? notifications.filter((n) => activeFilterDef.types.includes(n.type))
+      : notifications;
+
+    return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', flexWrap: 'wrap', gap: '12px' }}>
-        <div style={{ display: 'flex', gap: '12px' }}>
-          {['All', 'Reminders', 'Requests', 'Feedback', 'System'].map((filter, i) => {
-            const sel = i === 0;
-            const h = hovered === `notif-${filter}`;
+      {/* Header row */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '12px' }}>
+        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+          {NOTIF_FILTERS.map(({ label }) => {
+            const sel = notifFilter === label;
+            const h = hovered === `notif-tab-${label}`;
             return (
-              <button key={filter} onMouseEnter={() => setHovered(`notif-${filter}`)} onMouseLeave={() => setHovered(null)} style={{ padding: '10px 20px', background: h ? (sel ? '#145040' : '#f0faf5') : (sel ? '#1a5f4a' : '#fff'), color: sel ? '#fff' : (h ? '#1a5f4a' : '#57534e'), border: `1px solid ${h ? '#1a5f4a' : (sel ? '#1a5f4a' : '#e7e5e4')}`, borderRadius: '8px', fontWeight: '500', cursor: 'pointer', transition: 'all 0.15s ease' }}>{filter}</button>
+              <button
+                key={label}
+                type="button"
+                onClick={() => setNotifFilter(label)}
+                onMouseEnter={() => setHovered(`notif-tab-${label}`)}
+                onMouseLeave={() => setHovered(null)}
+                style={{ padding: '8px 18px', background: h ? (sel ? '#145040' : '#f0faf5') : (sel ? '#1a5f4a' : '#fff'), color: sel ? '#fff' : (h ? '#1a5f4a' : '#57534e'), border: `1px solid ${h ? '#1a5f4a' : (sel ? '#1a5f4a' : '#e7e5e4')}`, borderRadius: '8px', fontWeight: '500', cursor: 'pointer', fontSize: '14px', transition: 'all 0.15s ease' }}
+              >{label}</button>
             );
           })}
         </div>
-        {notifications.some((n) => n.unread) && (
-          <button onClick={handleMarkAllNotificationsRead} style={{ padding: '10px 20px', background: '#fff', color: '#1a5f4a', border: '1px solid #1a5f4a', borderRadius: '8px', fontWeight: '500', cursor: 'pointer' }}>Mark all read</button>
-        )}
+        <div style={{ display: 'flex', gap: '8px' }}>
+          {notifications.some((n) => n.unread) && (
+            <button
+              type="button"
+              onClick={handleMarkAllNotificationsRead}
+              onMouseEnter={() => setHovered('notif-mark-all')}
+              onMouseLeave={() => setHovered(null)}
+              style={{ padding: '8px 16px', background: hovered === 'notif-mark-all' ? '#f0faf5' : '#fff', color: '#1a5f4a', border: '1px solid #1a5f4a', borderRadius: '8px', fontWeight: '500', cursor: 'pointer', fontSize: '14px', transition: 'all 0.15s ease' }}
+            >Mark all read</button>
+          )}
+          {notifications.length > 0 && (
+            <button
+              type="button"
+              onClick={handleClearAllNotifications}
+              onMouseEnter={() => setHovered('notif-clear-all')}
+              onMouseLeave={() => setHovered(null)}
+              style={{ padding: '8px 16px', background: hovered === 'notif-clear-all' ? '#fef2f2' : '#fff', color: '#ef4444', border: '1px solid #fecaca', borderRadius: '8px', fontWeight: '500', cursor: 'pointer', fontSize: '14px', transition: 'all 0.15s ease' }}
+            >Clear all</button>
+          )}
+        </div>
       </div>
 
-      {notifications.map((notif) => {
+      {/* Empty state */}
+      {visibleNotifs.length === 0 && (
+        <div style={{ background: '#fff', borderRadius: '16px', border: '1px solid #e7e5e4', padding: '48px 24px', textAlign: 'center', color: '#a8a29e' }}>
+          <div style={{ fontSize: '40px', marginBottom: '12px' }}>🔔</div>
+          <p style={{ fontWeight: '500' }}>No {notifFilter !== 'All' ? notifFilter.toLowerCase() : ''} notifications</p>
+        </div>
+      )}
+
+      {/* Notification cards */}
+      {visibleNotifs.map((notif) => {
         const nid = notif.id ?? notif.notification_id;
         const rowHover = hovered === `notif-card-${nid}`;
         return (
           <div
             key={nid}
-            role="button"
-            tabIndex={0}
-            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleNotificationClick(notif); } }}
-            onClick={() => handleNotificationClick(notif)}
-            onMouseEnter={() => setHovered(`notif-card-${nid}`)}
-            onMouseLeave={() => setHovered(null)}
             style={{
-              background: rowHover ? '#f0faf5' : '#fff',
+              background: rowHover ? (notif.accentBg || '#f0faf5') : '#fff',
               borderRadius: '12px',
-              border: `1px solid ${notif.unread ? '#bbf7d0' : '#e7e5e4'}`,
-              padding: '20px',
+              border: `1px solid ${notif.unread ? (notif.borderColor || '#bbf7d0') : '#e7e5e4'}`,
+              padding: '16px 20px',
               marginBottom: '12px',
               display: 'flex',
-              gap: '16px',
-              alignItems: 'stretch',
-              borderLeft: notif.unread ? '4px solid #22c55e' : 'none',
-              cursor: 'pointer',
+              gap: '14px',
+              alignItems: 'flex-start',
+              borderLeft: notif.unread ? `4px solid ${notif.accent || '#22c55e'}` : 'none',
               transition: 'background 0.15s ease',
+              position: 'relative',
             }}
+            onMouseEnter={() => setHovered(`notif-card-${nid}`)}
+            onMouseLeave={() => setHovered(null)}
           >
-            <div style={{ width: '48px', height: '48px', background: notif.unread ? '#dcfce7' : '#f5f5f4', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '24px', flexShrink: 0 }}>{notif.icon}</div>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '4px', gap: '8px' }}>
-                <h4 style={{ fontWeight: '600', color: '#1c1917', margin: 0 }}>{notif.title}</h4>
-                {notif.unread && <span style={{ width: '10px', height: '10px', background: '#22c55e', borderRadius: '50%', flexShrink: 0, marginTop: '6px' }}></span>}
-              </div>
-              <p style={{ fontSize: '14px', color: '#57534e', marginBottom: '8px' }}>{notif.message}</p>
-              <span style={{ fontSize: '13px', color: '#a8a29e' }}>{notif.time}</span>
-            </div>
-            <div style={{
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'flex-end',
-              justifyContent: 'center',
-              flexShrink: 0,
-              gap: '4px',
-            }}
+            {/* Icon */}
+            <div style={{ width: '44px', height: '44px', background: notif.unread ? (notif.accentBg || '#dcfce7') : '#f5f5f4', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '22px', flexShrink: 0 }}>{notif.icon}</div>
+            {/* Body — clickable */}
+            <div
+              role="button"
+              tabIndex={0}
+              onClick={() => handleNotificationClick(notif)}
+              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleNotificationClick(notif); } }}
+              style={{ flex: 1, minWidth: 0, cursor: 'pointer' }}
             >
-              <span style={{ fontSize: '13px', fontWeight: '600', color: '#1a5f4a', whiteSpace: 'nowrap' }}>{getNotificationActionLabel(notif)}</span>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '4px', gap: '8px' }}>
+                <h4 style={{ fontWeight: '600', color: '#1c1917', margin: 0, fontSize: '15px' }}>{notif.title}</h4>
+                {notif.unread && <span style={{ width: '8px', height: '8px', background: notif.accent || '#22c55e', borderRadius: '50%', flexShrink: 0, marginTop: '5px' }}></span>}
+              </div>
+              <p style={{ fontSize: '13px', color: '#57534e', marginBottom: '6px', lineHeight: '1.5' }}>{notif.message}</p>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontSize: '12px', color: '#a8a29e' }}>{notif.time}</span>
+                <span style={{ fontSize: '12px', fontWeight: '600', color: notif.accent || '#1a5f4a' }}>{getNotificationActionLabel(notif)}</span>
+              </div>
             </div>
+            {/* Dismiss X */}
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); handleDeleteNotification(notif); }}
+              onMouseEnter={() => setHovered(`notif-del-${nid}`)}
+              onMouseLeave={() => setHovered(null)}
+              title="Dismiss"
+              style={{ background: hovered === `notif-del-${nid}` ? '#fef2f2' : 'transparent', border: 'none', borderRadius: '6px', width: '28px', height: '28px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: hovered === `notif-del-${nid}` ? '#ef4444' : '#a8a29e', fontSize: '14px', flexShrink: 0, transition: 'all 0.15s ease' }}
+            >✕</button>
           </div>
         );
       })}
     </div>
-  );
+    );
+  };
 
   // MESSAGING CHANNEL UI (SRS 2.9)
   const MessagingPanel = () => (
@@ -2520,7 +2655,7 @@ const Dashboard = () => {
           >
             🔍 View Full Session Details
           </button>
-          <button onClick={() => setShowMessaging(true)} onMouseEnter={() => setHovered('detail-msg')} onMouseLeave={() => setHovered(null)} style={{ width: '100%', padding: '14px', background: hovered === 'detail-msg' ? '#2563eb' : '#3b82f6', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: '600', cursor: 'pointer', fontSize: '15px', transition: 'all 0.2s ease' }}>💬 Message Tutor</button>
+          <button onClick={() => setShowMessaging(true)} onMouseEnter={() => setHovered('detail-msg')} onMouseLeave={() => setHovered(null)} style={{ width: '100%', padding: '14px', background: hovered === 'detail-msg' ? '#2563eb' : '#3b82f6', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: '600', cursor: 'pointer', fontSize: '15px', transition: 'all 0.2s ease' }}>💬 {String(s.tutor_id) === String(user?.id) ? 'Message Tutee' : 'Message Tutor'}</button>
           {activeTab === 'learning' && s.state === 'PENDING_CONFIRM' && <button onClick={() => openPaymentModal(s)} onMouseEnter={() => setHovered('detail-pay')} onMouseLeave={() => setHovered(null)} style={{ width: '100%', padding: '14px', background: hovered === 'detail-pay' ? '#16a34a' : '#22c55e', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: '600', cursor: 'pointer', fontSize: '15px', transition: 'all 0.2s ease' }}>💳 Pay Now</button>}
           {(s.state === 'CONFIRMED' || s.state === 'COMPLETED') && <button onClick={() => handleMarkOutcome(s.id, 'attended')} onMouseEnter={() => setHovered('detail-done')} onMouseLeave={() => setHovered(null)} style={{ width: '100%', padding: '14px', background: hovered === 'detail-done' ? '#16a34a' : '#22c55e', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: '600', cursor: 'pointer', fontSize: '15px', transition: 'all 0.2s ease' }}>✓ Mark as Completed</button>}
           {s.state === 'COMPLETED' && !s.has_rating && (
@@ -2621,7 +2756,27 @@ return (
                 <div style={{ textAlign: 'center', padding: '24px 8px' }}>
                   <div style={{ fontSize: '56px', marginBottom: '16px' }}>✓</div>
                   <h2 style={{ fontSize: '22px', fontWeight: '700', color: '#166534', marginBottom: '8px' }}>Payment Successful! 🎉</h2>
-                  <p style={{ color: '#57534e', fontSize: '15px' }}>Your session is confirmed. Good luck with your studies!</p>
+                  <p style={{ color: '#57534e', fontSize: '15px', marginBottom: '24px' }}>Your session is confirmed. Good luck with your studies!</p>
+                  <div style={{ display: 'flex', gap: '12px' }}>
+                    <button
+                      type="button"
+                      onClick={() => { closePaymentModal(); navigate(`/session/${ps.id}/chat`, { state: { tab: 'learning', filterTab: 'upcoming' } }); }}
+                      onMouseEnter={() => setHovered('pay-success-msg')}
+                      onMouseLeave={() => setHovered(null)}
+                      style={{ flex: 1, padding: '12px', background: hovered === 'pay-success-msg' ? '#2563eb' : '#3b82f6', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: '600', cursor: 'pointer', fontSize: '14px', transition: 'all 0.2s ease' }}
+                    >
+                      💬 Message Tutor
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { closePaymentModal(); navigate(`/session/${ps.id}`); }}
+                      onMouseEnter={() => setHovered('pay-success-view')}
+                      onMouseLeave={() => setHovered(null)}
+                      style={{ flex: 1, padding: '12px', background: hovered === 'pay-success-view' ? '#f0faf5' : '#fff', color: '#1a5f4a', border: '1px solid #1a5f4a', borderRadius: '10px', fontWeight: '600', cursor: 'pointer', fontSize: '14px', transition: 'all 0.2s ease' }}
+                    >
+                      🔍 View Session
+                    </button>
+                  </div>
                 </div>
               ) : paymentError ? (
                 <div style={{ textAlign: 'center', padding: '16px 8px' }}>
@@ -2771,6 +2926,86 @@ return (
       })()}
       {showMessaging && <MessagingPanel />}
       {showMessaging && <div onClick={() => setShowMessaging(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.3)', zIndex: 1000 }}></div>}
+      {penaltyNotif && (() => {
+        const rawContent = penaltyNotif.rawContent || penaltyNotif.content || '';
+        const recordMatch = rawContent.match(/\[record:([^\]]+)\]/);
+        const recordId = recordMatch ? recordMatch[1] : null;
+        const content = penaltyNotif.message || stripTokens(rawContent);
+        const isPenalty = penaltyNotif.type === 'penalty_issued';
+        const isAppealDecided = penaltyNotif.type === 'appeal_decided';
+        const meta = NOTIF_TYPE_META[penaltyNotif.type] || NOTIF_TYPE_META.penalty_issued;
+        const dismiss = async () => {
+          await handleMarkNotificationRead(penaltyNotif);
+          setPenaltyNotif(null);
+        };
+        return (
+          <div
+            role="presentation"
+            onClick={(e) => { if (e.target === e.currentTarget) dismiss(); }}
+            style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', background: 'rgba(0,0,0,0.55)', zIndex: 10100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px' }}
+          >
+            <div
+              onClick={(e) => e.stopPropagation()}
+              style={{ position: 'relative', background: '#fff', borderRadius: '20px', maxWidth: '460px', width: '100%', padding: '32px', boxShadow: '0 24px 48px rgba(0,0,0,0.25)' }}
+            >
+              {/* Close */}
+              <button
+                type="button"
+                onClick={dismiss}
+                style={{ position: 'absolute', top: '16px', right: '16px', background: 'none', border: 'none', fontSize: '20px', cursor: 'pointer', color: '#a8a29e', lineHeight: 1 }}
+              >✕</button>
+              {/* Icon + Title */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '14px', marginBottom: '20px' }}>
+                <div style={{ width: '52px', height: '52px', background: meta.accentBg, borderRadius: '14px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '28px', flexShrink: 0 }}>{meta.icon}</div>
+                <div>
+                  <div style={{ fontSize: '18px', fontWeight: '700', color: '#1c1917' }}>{penaltyNotif.title}</div>
+                  <div style={{ fontSize: '13px', color: '#a8a29e', marginTop: '2px' }}>
+                    {isPenalty ? 'Action required — you may submit an appeal' : 'No further action required'}
+                  </div>
+                </div>
+              </div>
+              {/* Body */}
+              <div style={{ background: meta.accentBg, border: `1px solid ${meta.borderColor}`, borderRadius: '12px', padding: '16px', marginBottom: '24px', fontSize: '14px', color: '#1c1917', lineHeight: '1.6' }}>
+                {content || 'Please check the notifications section for details.'}
+              </div>
+              {/* Buttons */}
+              <div style={{ display: 'flex', gap: '12px' }}>
+                <button
+                  type="button"
+                  onClick={dismiss}
+                  onMouseEnter={() => setHovered('penalty-dismiss')}
+                  onMouseLeave={() => setHovered(null)}
+                  style={{ flex: 1, padding: '12px', background: hovered === 'penalty-dismiss' ? '#f5f5f4' : '#fff', color: '#57534e', border: '1px solid #e7e5e4', borderRadius: '10px', fontWeight: '500', cursor: 'pointer', fontSize: '14px', transition: 'all 0.2s ease' }}
+                >
+                  {isAppealDecided ? 'Acknowledged' : 'Dismiss'}
+                </button>
+                {isPenalty && recordId && (
+                  <button
+                    type="button"
+                    onClick={() => { dismiss(); navigate(`/appeal/${recordId}`); }}
+                    onMouseEnter={() => setHovered('penalty-appeal')}
+                    onMouseLeave={() => setHovered(null)}
+                    style={{ flex: 1, padding: '12px', background: hovered === 'penalty-appeal' ? '#145040' : '#1a5f4a', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: '600', cursor: 'pointer', fontSize: '14px', transition: 'all 0.2s ease' }}
+                  >
+                    Appeal
+                  </button>
+                )}
+                {isAppealDecided && (
+                  <button
+                    type="button"
+                    onClick={() => { dismiss(); setActiveTab('notifications'); }}
+                    onMouseEnter={() => setHovered('appeal-view-notif')}
+                    onMouseLeave={() => setHovered(null)}
+                    style={{ flex: 1, padding: '12px', background: hovered === 'appeal-view-notif' ? '#4c1d95' : '#7c3aed', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: '600', cursor: 'pointer', fontSize: '14px', transition: 'all 0.2s ease' }}
+                  >
+                    View Details
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </>
   );
 };

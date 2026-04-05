@@ -29,6 +29,13 @@ const AdminLayout = ({ children }) => {
   const [notifOpen, setNotifOpen] = useState(false);
   const [notifications, setNotifications] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [notifFilter, setNotifFilter] = useState('All');
+
+  const ADMIN_NOTIF_FILTERS = [
+    { label: 'All',       types: null },
+    { label: 'Complaints', types: ['admin_complaint', 'admin_appeal'] },
+    { label: 'System',    types: ['admin_alert', 'session_update'] },
+  ];
 
   const fetchNotifications = useCallback(async () => {
     try {
@@ -42,6 +49,20 @@ const AdminLayout = ({ children }) => {
   }, []);
 
   useEffect(() => { fetchNotifications(); }, [fetchNotifications]);
+
+  const handleDeleteNotif = async (e, notif) => {
+    e.stopPropagation();
+    const id = notif?.notification_id || notif?.id;
+    setNotifications((prev) => prev.filter((n) => (n.notification_id || n.id) !== id));
+    setUnreadCount((c) => (!notif.is_read && !notif.read) ? Math.max(0, c - 1) : c);
+    try { await api.delete(`/notifications/${id}`); } catch { fetchNotifications(); }
+  };
+
+  const handleClearAllNotifs = async () => {
+    setNotifications([]);
+    setUnreadCount(0);
+    try { await api.delete('/notifications'); } catch { fetchNotifications(); }
+  };
 
   const handleNotifClick = async (notif) => {
     const id = notif?.notification_id || notif?.id;
@@ -89,29 +110,72 @@ const AdminLayout = ({ children }) => {
               )}
             </button>
             {notifOpen && (
-              <div style={{ position: 'absolute', top: '48px', right: 0, width: '340px', background: '#fff', borderRadius: '12px', boxShadow: '0 8px 32px rgba(0,0,0,0.15)', border: '1px solid #e7e5e4', zIndex: 1000, maxHeight: '400px', overflowY: 'auto' }}>
-                <div style={{ padding: '14px 16px', borderBottom: '1px solid #f5f5f4', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ position: 'absolute', top: '48px', right: 0, width: '360px', background: '#fff', borderRadius: '12px', boxShadow: '0 8px 32px rgba(0,0,0,0.15)', border: '1px solid #e7e5e4', zIndex: 1000, maxHeight: '480px', display: 'flex', flexDirection: 'column' }}>
+                {/* Header */}
+                <div style={{ padding: '12px 14px', borderBottom: '1px solid #f5f5f4', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
                   <span style={{ fontWeight: '700', fontSize: '14px', color: '#1c1917' }}>Notifications</span>
-                  <button onClick={() => setNotifOpen(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#a8a29e', fontSize: '18px', lineHeight: 1 }}>×</button>
+                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                    {notifications.length > 0 && (
+                      <button onClick={handleClearAllNotifs} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#ef4444', fontSize: '12px', fontWeight: '500', padding: '2px 6px' }}>Clear all</button>
+                    )}
+                    <button onClick={() => setNotifOpen(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#a8a29e', fontSize: '18px', lineHeight: 1 }}>×</button>
+                  </div>
                 </div>
-                {notifications.length === 0 && (
-                  <div style={{ padding: '24px', textAlign: 'center', color: '#a8a29e', fontSize: '13px' }}>No notifications</div>
-                )}
-                {notifications.map((n) => {
-                  const nid = n.notification_id || n.id;
-                  const unread = !n.is_read && !n.read;
-                  return (
-                    <div
-                      key={nid}
-                      onClick={() => handleNotifClick(n)}
-                      style={{ padding: '12px 16px', borderBottom: '1px solid #f5f5f4', cursor: 'pointer', background: unread ? '#f0fdf4' : '#fff', borderLeft: unread ? '3px solid #22c55e' : '3px solid transparent', transition: 'background 0.15s' }}
-                    >
-                      <div style={{ fontSize: '13px', fontWeight: unread ? '600' : '400', color: '#1c1917', marginBottom: '2px' }}>{n.title || 'Notification'}</div>
-                      <div style={{ fontSize: '12px', color: '#57534e', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{(n.content || n.message || '').replace(/\[complaint:[^\]]+\]/g, '').trim()}</div>
-                      {unread && <span style={{ fontSize: '11px', color: '#16a34a', fontWeight: '600', marginTop: '2px', display: 'block' }}>View complaint →</span>}
-                    </div>
-                  );
-                })}
+                {/* Filter tabs */}
+                <div style={{ display: 'flex', gap: '6px', padding: '10px 14px', borderBottom: '1px solid #f5f5f4', flexShrink: 0 }}>
+                  {ADMIN_NOTIF_FILTERS.map(({ label }) => {
+                    const sel = notifFilter === label;
+                    return (
+                      <button
+                        key={label}
+                        type="button"
+                        onClick={() => setNotifFilter(label)}
+                        style={{ padding: '4px 12px', background: sel ? '#1a5f4a' : '#f5f5f4', color: sel ? '#fff' : '#57534e', border: 'none', borderRadius: '6px', fontWeight: '500', cursor: 'pointer', fontSize: '12px', transition: 'all 0.15s' }}
+                      >{label}</button>
+                    );
+                  })}
+                </div>
+                {/* List */}
+                <div style={{ overflowY: 'auto', flex: 1 }}>
+                  {(() => {
+                    const filterDef = ADMIN_NOTIF_FILTERS.find((f) => f.label === notifFilter);
+                    const visible = filterDef?.types
+                      ? notifications.filter((n) => filterDef.types.includes(n.type || n.notification_type))
+                      : notifications;
+                    if (visible.length === 0) return (
+                      <div style={{ padding: '24px', textAlign: 'center', color: '#a8a29e', fontSize: '13px' }}>No notifications</div>
+                    );
+                    return visible.map((n) => {
+                      const nid = n.notification_id || n.id;
+                      const unread = !n.is_read && !n.read;
+                      const cleanContent = (n.content || n.message || '').replace(/\[(complaint|record):[^\]]+\]/g, '').trim();
+                      return (
+                        <div
+                          key={nid}
+                          style={{ padding: '12px 14px', borderBottom: '1px solid #f5f5f4', display: 'flex', gap: '10px', alignItems: 'flex-start', background: unread ? '#f0fdf4' : '#fff', borderLeft: unread ? '3px solid #22c55e' : '3px solid transparent', transition: 'background 0.15s' }}
+                        >
+                          <div
+                            role="button"
+                            tabIndex={0}
+                            onClick={() => handleNotifClick(n)}
+                            onKeyDown={(e) => { if (e.key === 'Enter') handleNotifClick(n); }}
+                            style={{ flex: 1, minWidth: 0, cursor: 'pointer' }}
+                          >
+                            <div style={{ fontSize: '13px', fontWeight: unread ? '600' : '400', color: '#1c1917', marginBottom: '2px' }}>{n.title || 'Notification'}</div>
+                            <div style={{ fontSize: '12px', color: '#57534e', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{cleanContent}</div>
+                            {unread && <span style={{ fontSize: '11px', color: '#16a34a', fontWeight: '600', marginTop: '2px', display: 'block' }}>View →</span>}
+                          </div>
+                          <button
+                            type="button"
+                            onClick={(e) => handleDeleteNotif(e, n)}
+                            title="Dismiss"
+                            style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#a8a29e', fontSize: '14px', flexShrink: 0, padding: '2px 4px', borderRadius: '4px', lineHeight: 1 }}
+                          >✕</button>
+                        </div>
+                      );
+                    });
+                  })()}
+                </div>
               </div>
             )}
           </div>

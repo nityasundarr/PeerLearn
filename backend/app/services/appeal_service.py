@@ -17,7 +17,7 @@ from datetime import datetime, timezone
 from app.core.config import settings
 from app.core.errors import ConflictError, ForbiddenError, NotFoundError, UnprocessableError
 from app.db import appeals_db, notifications_db
-from app.db.complaints_db import get_admin_user_ids
+from app.db.complaints_db import get_admin_user_ids, update_complaint_status
 from app.models.complaint import (
     AppealDetailResponse,
     AppealResponse,
@@ -78,16 +78,24 @@ def submit_appeal(user_id: str, body: SubmitAppealBody) -> AppealResponse:
         appeal_text=body.appeal_text,
     )
 
-    # Notify admins
+    # Reopen the linked complaint so admin can review the appeal
+    complaint_id = record.get("complaint_id", "")
+    if complaint_id:
+        try:
+            update_complaint_status(complaint_id, "under_review")
+        except Exception:
+            pass
+
+    # Notify admins — embed complaint_id so they can deep-link to it
     admin_ids = get_admin_user_ids()
     for admin_id in admin_ids:
         notifications_db.create_notification(
             user_id=admin_id,
-            notification_type="admin_alert",
-            title="New penalty appeal submitted",
+            notification_type="admin_appeal",
+            title="Penalty appeal submitted",
             content=(
-                f"A user has submitted an appeal against disciplinary record "
-                f"{body.disciplinary_record_id}."
+                f"A user has appealed a disciplinary action. "
+                f"Please review the complaint. [complaint:{complaint_id}]"
             ),
             is_mandatory=True,
         )
@@ -150,16 +158,22 @@ def decide_appeal(appeal_id: str, body: DecideAppealBody) -> AppealResponse:
 
     # Notify the appellant
     user_id = row.get("user_id", "")
-    outcome_messages = {
-        "upheld":   "Your appeal has been reviewed and the penalty has been upheld.",
-        "modified": "Your appeal has been reviewed and the penalty has been modified.",
-        "revoked":  "Your appeal has been reviewed and the penalty has been revoked.",
+    outcome_titles = {
+        "upheld":   "Appeal outcome: penalty upheld",
+        "modified": "Appeal outcome: penalty modified",
+        "revoked":  "Appeal outcome: penalty revoked",
     }
+    outcome_bodies = {
+        "upheld":   "Your appeal has been reviewed. The penalty has been upheld and remains in effect.",
+        "modified": "Your appeal has been reviewed. The penalty has been modified — please review the updated decision.",
+        "revoked":  "Your appeal has been reviewed. The penalty has been revoked. No further action is required.",
+    }
+    notes_suffix = f" Admin notes: {body.outcome_notes}" if body.outcome_notes else ""
     notifications_db.create_notification(
         user_id=user_id,
-        notification_type="admin_alert",
-        title="Appeal decision recorded",
-        content=outcome_messages.get(body.outcome, "Your appeal has been decided."),
+        notification_type="appeal_decided",
+        title=outcome_titles.get(body.outcome, "Appeal decision recorded"),
+        content=outcome_bodies.get(body.outcome, "Your appeal has been decided.") + notes_suffix,
         is_mandatory=True,
     )
 

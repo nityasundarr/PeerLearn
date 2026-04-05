@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import api from '../services/api';
 import { useAuth } from '../services/AuthContext';
 
@@ -25,7 +25,10 @@ const getInitials = (name) => (name || '')
 const SessionMessaging = () => {
   const { sessionId } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const { user } = useAuth();
+
+  const goBack = () => navigate('/dashboard', { state: { tab: location.state?.tab || 'home', filterTab: location.state?.filterTab } });
   const messagesEndRef = useRef(null);
 
   const [messages, setMessages] = useState([]);
@@ -63,7 +66,7 @@ const SessionMessaging = () => {
       console.log('[Messaging] channel_id:', data?.channel_id);
       console.log('[Messaging] messages:', normalized);
       setMessages(normalized);
-      setIsReadonly(data?.is_readonly ?? data?.channel?.is_readonly ?? false);
+      setIsReadonly((prev) => prev || (data?.is_readonly ?? data?.channel?.is_readonly ?? false));
       if (data?.session) setSession(data.session);
     } catch {
       setMessages([]);
@@ -81,6 +84,12 @@ const SessionMessaging = () => {
     const interval = setInterval(() => fetchMessages(), 3000);
     return () => clearInterval(interval);
   }, [sessionId, fetchMessages]);
+
+  useEffect(() => {
+    if (!session) return;
+    const terminal = ['completed_attended', 'completed_no_show', 'cancelled'].includes(session.status);
+    if (terminal) setIsReadonly(true);
+  }, [session]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -140,27 +149,7 @@ const SessionMessaging = () => {
           <div style={{ width: '40px', height: '40px', background: '#f59e0b', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 'bold', fontSize: '20px' }}>P</div>
           <span style={{ color: '#fff', fontSize: '22px', fontWeight: '700' }}>PeerLearn</span>
         </div>
-        <nav style={{ display: 'flex', gap: '8px' }}>
-          <button
-            type="button"
-            onClick={() => navigate('/dashboard')}
-            onMouseEnter={() => setHoverBack('nav')}
-            onMouseLeave={() => setHoverBack(null)}
-            style={{
-              background: hoverBack === 'nav' ? '#f0faf5' : 'transparent',
-              border: 'none',
-              padding: '10px 20px',
-              borderRadius: '8px',
-              color: hoverBack === 'nav' ? '#1a5f4a' : '#fff',
-              fontSize: '15px',
-              fontWeight: '500',
-              cursor: 'pointer',
-              transition: 'all 0.2s ease',
-            }}
-          >
-            🏠 Dashboard
-          </button>
-        </nav>
+        <nav />
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', background: 'rgba(255,255,255,0.2)', padding: '6px 14px 6px 6px', borderRadius: '10px' }}>
           <div style={{ width: '34px', height: '34px', background: '#f59e0b', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 'bold', fontSize: '14px' }}>{initials}</div>
           <span style={{ color: '#fff', fontSize: '14px', fontWeight: '500' }}>{user?.full_name || 'User'}</span>
@@ -180,7 +169,7 @@ const SessionMessaging = () => {
             </div>
             <button
               type="button"
-              onClick={() => navigate('/dashboard')}
+              onClick={() => goBack()}
               onMouseEnter={() => setHoverBack('card')}
               onMouseLeave={() => setHoverBack(null)}
               style={{
@@ -194,7 +183,7 @@ const SessionMessaging = () => {
                 transition: 'all 0.2s ease',
               }}
             >
-              Back to Dashboard
+              ← Back
             </button>
           </div>
 

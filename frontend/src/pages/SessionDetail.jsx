@@ -75,8 +75,24 @@ const SessionDetail = () => {
   const venueName = session?.venue_name || session?.venue?.name || null;
   const venueAddress = session?.venue_address || null;
   const venue = session?.venue_manual || venueName || (session?.venue_id ? 'Venue confirmed' : '—');
-  // Use server-computed map URL (includes lat/lng for DB venues, address-search for manual)
-  const oneMapEmbedUrl = session?.venue_map_url || null;
+
+  // Use server-computed map URL; fall back to a client-built amm.html URL
+  const oneMapEmbedUrl = (() => {
+    if (session?.venue_map_url) return session.venue_map_url;
+    const addr = venueAddress || venueName || session?.venue_manual || null;
+    if (!addr) return null;
+    const postalMatch = addr.match(/\bS?(\d{6})\b/);
+    const postal = postalMatch ? postalMatch[1] : null;
+    if (postal) {
+      return (
+        `https://www.onemap.gov.sg/amm/amm.html`
+        + `?mapStyle=Default&zoomLevel=17`
+        + `&marker=postalcode:${postal}!colour:red`
+        + `&popupWidth=200`
+      );
+    }
+    return null;
+  })();
 
   const canLeaveFeedback = ['completed_attended', 'completed_no_show'].includes(session?.status) && !session?.has_rating;
 
@@ -214,17 +230,19 @@ const SessionDetail = () => {
               )}
 
               {/* Action buttons */}
-              {canLeaveFeedback && (
+              {(canLeaveFeedback || ['completed_attended', 'completed_no_show', 'cancelled'].includes(session?.status)) && (
                 <div style={{ marginTop: '20px', display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
-                  <button
-                    type="button"
-                    onClick={() => navigate(`/feedback/${sessionId}`)}
-                    onMouseEnter={() => setHoverNav('feedback')}
-                    onMouseLeave={() => setHoverNav(null)}
-                    style={{ padding: '10px 20px', background: hoverNav === 'feedback' ? '#145040' : '#1a5f4a', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: '600', fontSize: '14px', cursor: 'pointer', transition: 'background 0.2s ease' }}
-                  >
-                    ⭐ Leave Feedback
-                  </button>
+                  {canLeaveFeedback && (
+                    <button
+                      type="button"
+                      onClick={() => navigate(`/feedback/${sessionId}`)}
+                      onMouseEnter={() => setHoverNav('feedback')}
+                      onMouseLeave={() => setHoverNav(null)}
+                      style={{ padding: '10px 20px', background: hoverNav === 'feedback' ? '#145040' : '#1a5f4a', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: '600', fontSize: '14px', cursor: 'pointer', transition: 'background 0.2s ease' }}
+                    >
+                      ⭐ Leave Feedback
+                    </button>
+                  )}
                   <button
                     type="button"
                     onClick={() => navigate('/complaints', { state: { preselectedSessionId: sessionId } })}

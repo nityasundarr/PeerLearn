@@ -65,6 +65,16 @@ def mark_read(notification_id: str, user_id: str) -> NotificationItem:
 # UC-2.3  Mark all notifications as read
 # ---------------------------------------------------------------------------
 
+def delete_notification(notification_id: str, user_id: str) -> None:
+    """Delete a single notification owned by the user."""
+    notifications_db.delete_notification(notification_id, user_id)
+
+
+def delete_all_notifications(user_id: str) -> None:
+    """Delete all notifications for the user."""
+    notifications_db.delete_all_notifications(user_id)
+
+
 def mark_all_read(user_id: str) -> int:
     """Mark all unread notifications for the user as read.
 

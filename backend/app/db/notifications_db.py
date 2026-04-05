@@ -130,6 +130,24 @@ def create_notification(
         logger.error("create_notification failed for user %s: %s", user_id, exc)
 
 
+def delete_notification(notification_id: str, user_id: str) -> None:
+    """Delete a single notification. Ownership enforced via user_id filter."""
+    if not notification_id or notification_id == "undefined":
+        raise NotFoundError("Notification not found.")
+    try:
+        supabase.table("notifications").delete().eq("id", notification_id).eq("user_id", user_id).execute()
+    except Exception as exc:
+        raise _db_error("delete_notification", exc) from exc
+
+
+def delete_all_notifications(user_id: str) -> None:
+    """Delete all notifications for a user."""
+    try:
+        supabase.table("notifications").delete().eq("user_id", user_id).execute()
+    except Exception as exc:
+        raise _db_error("delete_all_notifications", exc) from exc
+
+
 def mark_all_read(user_id: str) -> int:
     """Mark all unread notifications for a user as read.
 

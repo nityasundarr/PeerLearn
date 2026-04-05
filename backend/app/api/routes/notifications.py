@@ -70,3 +70,36 @@ async def mark_all_read(
 ) -> MessageResponse:
     updated = notification_service.mark_all_read(user_id)
     return MessageResponse(message=f"{updated} notification(s) marked as read.")
+
+
+# ---------------------------------------------------------------------------
+# DELETE /notifications/{id}
+# ---------------------------------------------------------------------------
+
+@router.delete(
+    "/{notification_id}",
+    response_model=MessageResponse,
+    summary="Delete a single notification",
+)
+async def delete_notification(
+    notification_id: str,
+    user_id: Annotated[str, Depends(get_current_user)],
+) -> MessageResponse:
+    notification_service.delete_notification(notification_id, user_id)
+    return MessageResponse(message="Notification deleted.")
+
+
+# ---------------------------------------------------------------------------
+# DELETE /notifications
+# ---------------------------------------------------------------------------
+
+@router.delete(
+    "",
+    response_model=MessageResponse,
+    summary="Delete all notifications for the authenticated user",
+)
+async def delete_all_notifications(
+    user_id: Annotated[str, Depends(get_current_user)],
+) -> MessageResponse:
+    notification_service.delete_all_notifications(user_id)
+    return MessageResponse(message="All notifications deleted.")

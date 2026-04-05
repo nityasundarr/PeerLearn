@@ -62,6 +62,7 @@ const FeedbackForm = () => {
   const [hovered, setHovered] = useState(null);
   const [reviewText, setReviewText] = useState('');
   const [traits, setTraits] = useState([]);
+  const [isAnonymous, setIsAnonymous] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
@@ -101,6 +102,7 @@ const FeedbackForm = () => {
         stars: rating,
         standout_traits: traits,
         review_text: reviewText || undefined,
+        is_anonymous: isAnonymous,
       });
       navigate('/dashboard');
     } catch (err) {
@@ -115,7 +117,10 @@ const FeedbackForm = () => {
     setError(null);
     setLoading(true);
     try {
-      await api.patch(`/sessions/${sessionId}/outcome`, { outcome: 'no_show' });
+      const alreadyDone = session?.status === 'completed_attended' || session?.status === 'completed_no_show';
+      if (!alreadyDone) {
+        await api.patch(`/sessions/${sessionId}/outcome`, { outcome: 'no_show' });
+      }
       const { data: refreshed } = await api.get(`/sessions/${sessionId}`);
       setSession(refreshed);
       if (refreshed.status === 'completed_attended' || refreshed.status === 'completed_no_show') {
@@ -376,14 +381,18 @@ const FeedbackForm = () => {
           marginBottom: '24px',
         }}>
           <span style={{ fontSize: '14px', color: '#1c1917' }}>Submit feedback anonymously</span>
-          <div style={{
-            width: '50px',
-            height: '28px',
-            background: '#e7e5e4',
-            borderRadius: '14px',
-            position: 'relative',
-            cursor: 'pointer',
-          }}>
+          <div
+            onClick={() => !alreadyRated && setIsAnonymous((v) => !v)}
+            style={{
+              width: '50px',
+              height: '28px',
+              background: isAnonymous ? '#1a5f4a' : '#e7e5e4',
+              borderRadius: '14px',
+              position: 'relative',
+              cursor: alreadyRated ? 'default' : 'pointer',
+              transition: 'background 0.2s ease',
+            }}
+          >
             <div style={{
               width: '24px',
               height: '24px',
@@ -391,8 +400,9 @@ const FeedbackForm = () => {
               borderRadius: '50%',
               position: 'absolute',
               top: '2px',
-              left: '2px',
+              left: isAnonymous ? '24px' : '2px',
               boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
+              transition: 'left 0.2s ease',
             }}></div>
           </div>
         </div>

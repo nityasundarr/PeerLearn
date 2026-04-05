@@ -320,64 +320,30 @@ def list_sessions(
     return [SessionResponse.from_db(_inject_has_rating(r)) for r in rows]
 
 
-def _geocode_onemap(search_val: str) -> tuple[float | None, float | None]:
-    """Call OneMap Search API to get lat/lng for a postal code or address string.
+def _build_onemap_url(postal: str | None, name: str = "", address: str = "") -> str:
+    """Return a OneMap Advanced Minimap embed URL.
 
-    Returns (lat, lng) within Singapore bounds, or (None, None) on failure.
-    Uses a 4-second timeout so a slow/down OneMap API doesn't stall the request.
-    """
-    import json
-    import urllib.request
-    from urllib.parse import quote as urlquote
-
-    try:
-        api_url = (
-            "https://www.onemap.gov.sg/api/common/elastic/search"
-            f"?searchVal={urlquote(search_val, safe='')}"
-            "&returnGeom=Y&getAddrDetails=Y&pageNum=1"
-        )
-        req = urllib.request.Request(api_url, headers={"User-Agent": "PeerLearn/1.0"})
-        with urllib.request.urlopen(req, timeout=4) as resp:
-            data = json.loads(resp.read().decode())
-        results = data.get("results") or []
-        if results:
-            lat = float(results[0].get("LATITUDE") or 0)
-            # OneMap has a known typo "LONGTITUDE" in some versions
-            lng = float(
-                results[0].get("LONGITUDE") or results[0].get("LONGTITUDE") or 0
-            )
-            # Sanity-check: Singapore bounding box
-            if 1.1 < lat < 1.5 and 103.5 < lng < 104.1:
-                return lat, lng
-    except Exception:
-        pass
-    return None, None
-
-
-def _build_onemap_url(search_val: str, name: str = "", address: str = "") -> str:
-    """Geocode search_val via OneMap API and return a minimap embed URL with a pin.
-
-    Falls back to addressSearched (no guaranteed pin, but centres the map) if
-    geocoding fails or returns out-of-bounds coordinates.
+    Uses the amm.html endpoint with postalcode: marker syntax when a 6-digit
+    Singapore postal code is available — this reliably centres and pins the map.
+    Falls back to address text if no postal code is found.
     """
     from urllib.parse import quote as urlquote
 
-    lat, lng = _geocode_onemap(search_val)
-    if lat and lng:
-        h_line = urlquote((name or search_val)[:40], safe="")
-        l_line = urlquote((address or "")[:60], safe="")
+    if postal:
+        popup = urlquote(f"{name}\n{address}".strip()[:80], safe="")
         return (
-            "https://www.onemap.gov.sg/minimap/minimap.html"
-            f"?mapStyle=Default&zoomLevel=17&onLoad=1"
-            f"&marker=true&lat={lat}&lng={lng}"
-            f"&popupWidth=200&popupHeight=50"
-            f"&markerHLine={h_line}&markerLLine={l_line}"
+            "https://www.onemap.gov.sg/amm/amm.html"
+            f"?mapStyle=Default&zoomLevel=17"
+            f"&marker=postalcode:{postal}!colour:red!popupMsg:{popup}"
+            f"&popupWidth=200"
         )
-    # Fallback — centres map on the address but may not show a pin
+    # Fallback: no postal code — just centre on the address name
+    search = urlquote((address or name)[:80], safe="")
     return (
-        "https://www.onemap.gov.sg/minimap/minimap.html"
-        f"?mapStyle=Default&zoomLevel=17&onLoad=1"
-        f"&addressSearched={urlquote(search_val, safe='')}"
+        "https://www.onemap.gov.sg/amm/amm.html"
+        f"?mapStyle=Default&zoomLevel=15"
+        f"&marker=postalcode:{search}!colour:red"
+        f"&popupWidth=200"
     )
 
 
@@ -395,16 +361,16 @@ def _enrich_venue(row: dict) -> dict:
                 name = venue.get("name", "") or ""
                 address = venue.get("address", "") or ""
                 row = {**row, "venue_name": name, "venue_address": address}
-                # Use just the 6-digit postal code (group 1, no S prefix) so
-                # OneMap geocoding is as precise as possible.
                 postal_match = re.search(r'\bS?(\d{6})\b', address)
-                search_val = postal_match.group(1) if postal_match else (name or address)
-                row = {**row, "venue_map_url": _build_onemap_url(search_val, name=name, address=address)}
+                postal = postal_match.group(1) if postal_match else None
+                row = {**row, "venue_map_url": _build_onemap_url(postal, name=name, address=address)}
         except Exception:
             pass
     elif venue_manual:
         try:
-            row = {**row, "venue_map_url": _build_onemap_url(venue_manual, name=venue_manual)}
+            postal_match = re.search(r'\bS?(\d{6})\b', venue_manual)
+            postal = postal_match.group(1) if postal_match else None
+            row = {**row, "venue_map_url": _build_onemap_url(postal, name=venue_manual, address=venue_manual)}
         except Exception:
             pass
     return row
