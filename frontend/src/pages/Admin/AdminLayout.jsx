@@ -10,6 +10,7 @@ const getInitials = (name) =>
 const NAV_ITEMS = [
   { path: '/admin/overview',    label: 'Overview',         icon: '📊' },
   { path: '/admin/complaints',  label: 'Complaints',       icon: '🚨' },
+  { path: '/admin/appeals',     label: 'Appeals',          icon: '⚖️' },
   { path: '/admin/demand',      label: 'Demand Analytics', icon: '📈' },
   { path: '/admin/supply',      label: 'Supply Analytics', icon: '👨‍🏫' },
   { path: '/admin/gaps',        label: 'Gap Analysis',     icon: '🔍' },

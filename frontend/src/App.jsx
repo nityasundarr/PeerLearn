@@ -20,6 +20,7 @@ import DemandAnalytics from './pages/Admin/DemandAnalytics';
 import SupplyAnalytics from './pages/Admin/SupplyAnalytics';
 import GapAnalysis from './pages/Admin/GapAnalysis';
 import { ComplaintsList, ComplaintDetail } from './pages/Admin/AdminComplaints';
+import AdminAppeals from './pages/Admin/AdminAppeals';
 
 // Pages - new auth pages
 import SignUp from './pages/SignUp';
@@ -248,6 +249,14 @@ function AppRoutes() {
             <ComplaintDetail />
           </ProtectedRoute>
         }
+      />
+      <Route
+        path="/admin/appeals"
+        element={<ProtectedRoute><AdminAppeals /></ProtectedRoute>}
+      />
+      <Route
+        path="/admin/appeals/:appealId"
+        element={<ProtectedRoute><AdminAppeals /></ProtectedRoute>}
       />
       <Route path="/admin" element={<Navigate to="/admin/overview" replace />} />
 
