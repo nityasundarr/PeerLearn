@@ -29,16 +29,19 @@ const ComplaintsList = () => {
   const [complaints, setComplaints] = useState([]);
   const [statusFilter, setStatusFilter] = useState('');
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(null);
   const [hovered, setHovered] = useState(null);
 
   const load = useCallback(async () => {
     setLoading(true);
+    setLoadError(null);
     try {
       const params = statusFilter ? `?status=${statusFilter}` : '';
       const { data } = await api.get(`/complaints${params}`);
       setComplaints(Array.isArray(data) ? data : []);
-    } catch {
+    } catch (err) {
       setComplaints([]);
+      setLoadError(err.response?.data?.detail ?? err.message ?? 'Failed to load complaints');
     } finally {
       setLoading(false);
     }
@@ -84,7 +87,12 @@ const ComplaintsList = () => {
         </div>
 
         {loading && <div style={{ color: '#a8a29e', padding: '48px', textAlign: 'center' }}>Loading…</div>}
-        {!loading && complaints.length === 0 && (
+        {!loading && loadError && (
+          <div style={{ color: '#b91c1c', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '10px', padding: '16px', marginBottom: '16px', fontSize: '14px' }}>
+            Error: {loadError}
+          </div>
+        )}
+        {!loading && !loadError && complaints.length === 0 && (
           <div style={{ color: '#a8a29e', padding: '48px', textAlign: 'center', background: '#fff', borderRadius: '14px', border: '1px solid #e7e5e4' }}>No complaints found.</div>
         )}
 
