@@ -113,6 +113,20 @@ const venueDisplayForLearning = (s) => {
   return 'Pending venue selection';
 };
 
+/** Map GET /matching/recommendations tutor row for inline Pending tab list */
+const mapPendingRecTutor = (t) => ({
+  id: t.tutor_id ?? t.id,
+  name: t.full_name ?? t.name ?? 'Tutor',
+  initials: getInitials(t.full_name ?? t.name),
+  rating: Number(t.avg_rating ?? t.rating ?? 0),
+  sessions: t.completed_sessions ?? t.total_sessions ?? 0,
+  reliability: Number(t.reliability_score ?? 0),
+  distance: t.distance_bucket ?? '—',
+  areas: Array.isArray(t.planning_areas) ? t.planning_areas : [],
+  availableSlots: t.available_slot_count ?? 0,
+  matchScore: Number(t.match_score ?? t.score ?? 0),
+});
+
 const paymentStatusLabel = (s) => {
   const st = normalizeSessionStatus(s);
   const map = {
@@ -631,6 +645,11 @@ const Dashboard = () => {
   const [chatMessages, setChatMessages] = useState([]);
   const [chatPollingRef, setChatPollingRef] = useState(null);
   const [tutorStats, setTutorStats] = useState(null);
+  const [expandedRequestId, setExpandedRequestId] = useState(null);
+  const [pendingRecommendations, setPendingRecommendations] = useState({});
+  const [pendingRecommendationsLoading, setPendingRecommendationsLoading] = useState({});
+  const [requestSentTutor, setRequestSentTutor] = useState(null);
+  const [sendingTutorId, setSendingTutorId] = useState(null);
 
   const stableSetChatSessionId = useCallback(
     (id) => setSelectedChatSessionId(id),
@@ -701,9 +720,11 @@ const Dashboard = () => {
   }
 
   const learningBadge = hasTuteeRole
-    ? learningSessions.filter((s) =>
-      ['tutor_accepted', 'pending_confirmation', 'pending_tutor_selection'].includes(s.status),
-    ).length
+    ? openTuteeRequests.length
+      + learningSessions.filter((s) => {
+        const st = normalizeSessionStatus(s);
+        return ['tutor_accepted', 'pending_confirmation', 'pending_confirm'].includes(st);
+      }).length
     : 0;
   const tutoringBadge = hasTutorRole ? tutoringPendingSelectionCount : 0;
 
@@ -1375,25 +1396,32 @@ const Dashboard = () => {
     );
     const tutorHasIncomingHome = hasTutorRole && mergedTutorIncoming.length > 0;
 
-    const hasPendingTutorSelectionSession = hasTuteeRole && learningSessions.some((s) => s.status === 'pending_tutor_selection');
-    const openReqIds = new Set(openTuteeRequests.map((r) => String(r.id ?? r.request_id ?? '')));
-    const hasMatchForOpenRequest = openTuteeRequests.length > 0 && learningSessions.some((s) => (
-      s.status === 'pending_tutor_selection' && openReqIds.has(String(s.request_id ?? ''))
-    ));
-
     const homePendingBlocks = [];
 
-    const pendingTutorSelectionCount = learningSessions.filter(
-      (s) => (s.status || s.state || '')
-        .toLowerCase()
-        .replace(/\s/g, '_') === 'pending_tutor_selection'
-    ).length;
+    const hasPendingTutorSelectionSession = hasTuteeRole && learningSessions.some(
+      (s) => normalizeSessionStatus(s) === 'pending_tutor_selection',
+    );
+    const pendingTutorSession = learningSessions.find((s) =>
+      normalizeSessionStatus(s) === 'pending_tutor_selection',
+    );
+    const pendingTutorName = pendingTutorSession?.tutor
+      || pendingTutorSession?.tutor_name
+      || pendingTutorSession?.tutor_full_name
+      || 'your selected tutor';
 
-    const openRequestCount = pendingTutorSelectionCount + openTuteeRequests.length;
-    if (hasTuteeRole && openRequestCount > 0) {
+    if (hasTuteeRole && openTuteeRequests.length > 0) {
+      const homeOpenTitle = hasPendingTutorSelectionSession
+        ? `⏳ Waiting for ${pendingTutorName} to accept`
+        : `📬 ${openTuteeRequests.length} request(s) submitted`;
+      const homeOpenSubtext = hasPendingTutorSelectionSession
+        ? 'Your request has been sent. You\'ll be notified when they accept and propose time slots.'
+        : 'We\'ll notify you when matching tutors are available. You can also check back to browse tutors.';
+      const homeOpenButtonLabel = hasPendingTutorSelectionSession
+        ? 'View in My Learning →'
+        : 'Check for Tutors →';
       homePendingBlocks.push(
         <div
-          key="home-pa-open-combined"
+          key="home-pa-open-tutee"
           style={{
             background: '#fffbeb',
             border: '1px solid #fde68a',
@@ -1407,19 +1435,38 @@ const Dashboard = () => {
           }}
         >
           <div>
-            <div style={{ fontSize: '15px', fontWeight: '600', color: '#92400e' }}
-            >
-              📬  {openRequestCount} request(s) waiting for a tutor
+            <div style={{ fontSize: '15px', fontWeight: '600', color: '#92400e' }}>
+              {homeOpenTitle}
             </div>
             <div style={{ fontSize: '13px', color: '#a16207', marginTop: '4px' }}>
-              Your request is open — we'll notify you when a tutor accepts
+              {homeOpenSubtext}
             </div>
           </div>
-          <button type="button" onClick={() => { setActiveTab('learning'); setLearningFilterTab('pending'); }} onMouseEnter={() => setHovered('home-pa-open-combined')} onMouseLeave={() => setHovered(null)} style={{ padding: '10px 16px', background: hovered === 'home-pa-open-combined' ? '#f59e0b' : '#fbbf24', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: '600', cursor: 'pointer', fontSize: '14px', whiteSpace: 'nowrap' }}>View in Pending →</button>
-
-          </div>
-      )
-    };
+          <button
+            type="button"
+            onClick={() => {
+              setActiveTab('learning');
+              setLearningFilterTab('pending');
+            }}
+            onMouseEnter={() => setHovered('home-pa-open-learn')}
+            onMouseLeave={() => setHovered(null)}
+            style={{
+              padding: '10px 16px',
+              background: hovered === 'home-pa-open-learn' ? '#f59e0b' : '#fbbf24',
+              color: '#fff',
+              border: 'none',
+              borderRadius: '8px',
+              fontWeight: '600',
+              cursor: 'pointer',
+              fontSize: '14px',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {homeOpenButtonLabel}
+          </button>
+        </div>,
+      );
+    }
 
 
 
@@ -1604,6 +1651,23 @@ const Dashboard = () => {
 
   // MY LEARNING TAB
   const LearningTab = () => {
+    const sendRequestToTutor = async (requestId, tutor) => {
+      setSendingTutorId(tutor.id);
+      try {
+        await api.post('/sessions', { request_id: requestId, tutor_id: tutor.id });
+        await fetchLearningSessions();
+        await fetchOpenTuteeRequests();
+        await fetchNotifications();
+        setRequestSentTutor(tutor.name || 'the tutor');
+        setExpandedRequestId(null);
+        setTimeout(() => setRequestSentTutor(null), 5000);
+      } catch (e) {
+        console.error(e);
+      } finally {
+        setSendingTutorId(null);
+      }
+    };
+
     const learningTabKeys = [
       { key: 'pending', label: 'Pending' },
       { key: 'upcoming', label: 'Upcoming' },
@@ -1611,19 +1675,53 @@ const Dashboard = () => {
       { key: 'cancelled', label: 'Cancelled' },
     ];
     const filteredLearningSessions = learningSessions.filter((s) => learningTuteeBucket(s) === learningFilterTab);
-    const pendingTabCount = learningSessions.filter((s) =>
-      learningTuteeBucket(s) === 'pending',
-    ).length + openTuteeRequests.length;
-    // Sessions in pending that need action (slot to confirm or payment to make)
-    const pendingActionCount = learningSessions.filter((s) => {
-      const st = normalizeSessionStatus(s);
-      return (
-        (st === 'tutor_accepted' && Array.isArray(s.proposed_slots) && s.proposed_slots.length > 0)
-        || st === 'pending_confirmation'
-      );
-    }).length;
+    const pendingLearningSessions = learningSessions.filter((s) => learningTuteeBucket(s) === 'pending');
+    const pendingTabCount = openTuteeRequests.length + pendingLearningSessions.length;
     return (
     <div>
+      {requestSentTutor && (
+        <div style={{
+          background: '#f0fdf4',
+          border: '1px solid #86efac',
+          borderRadius: '12px',
+          padding: '16px 20px',
+          marginBottom: '20px',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          gap: '12px',
+        }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <span style={{ fontSize: '24px' }}>✅</span>
+            <div>
+              <div style={{ fontSize: '15px', fontWeight: '600', color: '#166534' }}>
+                Request sent to {requestSentTutor}!
+              </div>
+              <div style={{ fontSize: '13px', color: '#15803d', marginTop: '2px' }}>
+                You&apos;ll be notified when they accept and propose time slots.
+                Check back here for updates.
+              </div>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setRequestSentTutor(null)}
+            style={{
+              background: 'none',
+              border: 'none',
+              cursor: 'pointer',
+              fontSize: '18px',
+              color: '#166534',
+              padding: '4px 8px',
+              borderRadius: '6px',
+              flexShrink: 0,
+            }}
+          >
+            ✕
+          </button>
+        </div>
+      )}
       <div style={{ display: 'flex', gap: '12px', marginBottom: '24px', flexWrap: 'wrap' }}>
         {learningTabKeys.map(({ key, label }) => {
           const sel = learningFilterTab === key;
@@ -1647,54 +1745,316 @@ const Dashboard = () => {
         })}
       </div>
 
-      {/* Open requests waiting for a tutor match — only shown in pending tab */}
-      {learningFilterTab === 'pending' && openTuteeRequests.map((req) => (
-        <div key={`req-${req.id || req.request_id}`} style={{
-          background: '#fffbeb',
-          borderRadius: '16px',
-          border: '1px solid #fde68a',
-          padding: '24px',
-          marginBottom: '16px',
-        }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-            <div>
-              <div style={{ fontWeight: '700', fontSize: '16px', color: '#1c1917', marginBottom: '4px' }}>
-                {(req.subjects || []).join(', ') || '—'}
-              </div>
-              <div style={{ fontSize: '13px', color: '#78716c' }}>
-                {(req.topics || []).join(', ') || '—'}
-              </div>
+      <>
+        {learningFilterTab === 'pending' && openTuteeRequests.length === 0 && filteredLearningSessions.length === 0 && (
+          <div style={{ background: '#fff', borderRadius: '16px',
+            border: '1px solid #e7e5e4', padding: '40px 24px',
+            textAlign: 'center', color: '#57534e', marginBottom: '16px' }}>
+            No pending requests.
+          </div>
+        )}
+        {learningFilterTab === 'pending' && openTuteeRequests.map((req) => {
+              const subj = req.subjects?.[0] || req.subject || '—';
+              const topic = req.topics?.[0] || req.topic || '—';
+              const level = req.academic_level || '—';
+              const urgencyMap = {
+                exam_soon: '🔥 Exam Soon',
+                assignment_due: '⚡ Assignment Due',
+                general_study: '📚 General Study',
+              };
+              const urgencyText = urgencyMap[req.urgency_category] || req.urgency_category || '—';
+              const submitted = req.created_at
+                ? new Date(req.created_at).toLocaleDateString('en-SG',
+                    { weekday: 'short', day: 'numeric', month: 'short' })
+                : '—';
+              const rid = req.id ?? req.request_id;
+              const chooseHoverKey = `pending-choose-${req.id ?? rid}`;
+              const cancelHoverKey = `pending-cancel-${req.id ?? rid}`;
+              const matchingSession = learningSessions.find((s) =>
+                normalizeSessionStatus(s) === 'pending_tutor_selection'
+                && (
+                  s.request_id === req.id
+                  || s.request_id === req.request_id
+                  || String(s.request_id) === String(req.id)
+                  || String(s.request_id) === String(req.request_id)
+                  || String(s.request_id) === String(rid)
+                ),
+              );
+              const isExpanded = expandedRequestId === rid;
+              const recList = pendingRecommendations[rid];
+              const loadingRec = pendingRecommendationsLoading[rid];
+              return (
+                <div key={rid} style={{ background: '#fff', borderRadius: '16px',
+                  border: '1px solid #e7e5e4', padding: '24px', marginBottom: '16px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between',
+                    alignItems: 'flex-start' }}>
+                    <div>
+                      <h3 style={{ fontSize: '18px', fontWeight: '600',
+                        color: '#1c1917', marginBottom: '4px' }}>
+                        {subj}: {topic}
+                      </h3>
+                      <p style={{ fontSize: '14px', color: '#57534e', marginBottom: '8px' }}>
+                        {level} • {urgencyText}
+                      </p>
+                      <p style={{ fontSize: '13px', color: '#a8a29e' }}>
+                        Submitted: {submitted}
+                      </p>
+                    </div>
+                    <span style={{ background: '#fef3c7', color: '#92400e',
+                      padding: '4px 12px', borderRadius: '20px',
+                      fontSize: '12px', fontWeight: '600' }}>
+                      Open
+                    </span>
+                  </div>
+                  {matchingSession && (
+                    <div style={{
+                      background: '#f0fdf4',
+                      border: '1px solid #86efac',
+                      borderRadius: '10px',
+                      padding: '12px 16px',
+                      marginTop: '12px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '10px',
+                    }}
+                    >
+                      <span style={{ fontSize: '18px' }}>⏳</span>
+                      <div>
+                        <div style={{ fontSize: '14px', fontWeight: '600', color: '#166534' }}>
+                          Request sent to {matchingSession.tutor
+                            || matchingSession.tutor_name
+                            || matchingSession.tutor_full_name
+                            || 'your tutor'}
+                        </div>
+                        <div style={{ fontSize: '12px', color: '#15803d', marginTop: '2px' }}>
+                          Waiting for them to accept and propose time slots
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                  <div style={{ marginTop: '16px', paddingTop: '16px',
+                    borderTop: '1px solid #e7e5e4', display: 'flex', gap: '12px' }}>
+                    {!matchingSession && (
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        if (expandedRequestId === rid) {
+                          setExpandedRequestId(null);
+                          return;
+                        }
+                        setExpandedRequestId(rid);
+                        if (pendingRecommendations[rid] !== undefined) {
+                          return;
+                        }
+                        setPendingRecommendationsLoading((prev) => ({ ...prev, [rid]: true }));
+                        try {
+                          const { data } = await api.get('/matching/recommendations', {
+                            params: { request_id: rid },
+                          });
+                          const raw = Array.isArray(data) ? data : (data.recommendations ?? data.tutors ?? []);
+                          const list = raw.map(mapPendingRecTutor);
+                          setPendingRecommendations((prev) => ({ ...prev, [rid]: list }));
+                        } catch {
+                          setPendingRecommendations((prev) => ({ ...prev, [rid]: [] }));
+                        } finally {
+                          setPendingRecommendationsLoading((prev) => ({ ...prev, [rid]: false }));
+                        }
+                      }}
+                      onMouseEnter={() => setHovered(chooseHoverKey)}
+                      onMouseLeave={() => setHovered(null)}
+                      style={{
+                        padding: '10px 20px',
+                        background: hovered === chooseHoverKey ? '#145040' : '#1a5f4a',
+                        color: '#fff',
+                        border: 'none',
+                        borderRadius: '8px',
+                        fontWeight: '600',
+                        cursor: 'pointer',
+                        fontSize: '14px',
+                        transition: 'all 0.2s ease',
+                      }}
+                    >
+                      {isExpanded ? 'Hide Tutors ↑' : 'View Available Tutors →'}
+                    </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        try {
+                          await api.delete(`/requests/${rid}`);
+                          if (expandedRequestId === rid) setExpandedRequestId(null);
+                          fetchOpenTuteeRequests();
+                          fetchNotifications();
+                        } catch {
+                          /* ignore */
+                        }
+                      }}
+                      onMouseEnter={() => setHovered(cancelHoverKey)}
+                      onMouseLeave={() => setHovered(null)}
+                      style={{
+                        padding: '10px 20px',
+                        background: hovered === cancelHoverKey ? '#fef2f2' : '#fff',
+                        color: '#ef4444',
+                        border: `1px solid ${hovered === cancelHoverKey ? '#ef4444' : '#fecaca'}`,
+                        borderRadius: '8px',
+                        fontWeight: '500',
+                        cursor: 'pointer',
+                        fontSize: '14px',
+                        transition: 'all 0.2s ease',
+                      }}
+                    >
+                      Cancel Request
+                    </button>
+                  </div>
+                  {expandedRequestId === rid && !matchingSession && (
+                    <div style={{
+                      marginTop: '16px',
+                      paddingTop: '16px',
+                      borderTop: '1px solid #e7e5e4',
+                    }}
+                    >
+                      {loadingRec ? (
+                        <div style={{ textAlign: 'center', color: '#a8a29e', padding: '24px' }}>
+                          Loading tutors...
+                        </div>
+                      ) : !recList || recList.length === 0 ? (
+                        <div style={{ textAlign: 'center', color: '#a8a29e', padding: '24px' }}>
+                          🔍 No tutors found matching your request yet.
+                        </div>
+                      ) : (
+                        <div>
+                          <h4 style={{
+                            fontSize: '15px',
+                            fontWeight: '600',
+                            color: '#1c1917',
+                            marginBottom: '12px',
+                          }}
+                          >
+                            Available Tutors
+                          </h4>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                            {recList.map((tutor, idx) => (
+                              <div
+                                key={tutor.id}
+                                style={{
+                                  background: '#fff',
+                                  borderRadius: '12px',
+                                  border: '1px solid #e7e5e4',
+                                  padding: '16px',
+                                  position: 'relative',
+                                }}
+                              >
+                                {idx === 0 && (
+                                  <div style={{
+                                    position: 'absolute',
+                                    top: '-10px',
+                                    right: '16px',
+                                    background: '#f59e0b',
+                                    color: '#fff',
+                                    padding: '4px 10px',
+                                    borderRadius: '20px',
+                                    fontSize: '11px',
+                                    fontWeight: '600',
+                                  }}
+                                  >
+                                    ⭐ Best Match
+                                  </div>
+                                )}
+                                <div style={{ display: 'flex', gap: '14px', alignItems: 'flex-start' }}>
+                                  <div style={{
+                                    width: '48px',
+                                    height: '48px',
+                                    background: '#f59e0b',
+                                    borderRadius: '12px',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    color: '#fff',
+                                    fontWeight: 'bold',
+                                    fontSize: '16px',
+                                    flexShrink: 0,
+                                  }}
+                                  >
+                                    {tutor.initials}
+                                  </div>
+                                  <div style={{ flex: 1, minWidth: 0 }}>
+                                    <div style={{ fontWeight: '700', fontSize: '16px', color: '#1c1917' }}>
+                                      {tutor.name}
+                                    </div>
+                                    <div style={{ fontSize: '12px', color: '#78716c', marginTop: '4px' }}>
+                                      {(tutor.areas || []).join(', ') || '—'} · {tutor.distance}
+                                    </div>
+                                    <div style={{ display: 'flex', gap: '12px', fontSize: '12px', color: '#57534e', marginTop: '8px', flexWrap: 'wrap' }}>
+                                      <span>⭐ {tutor.rating.toFixed(1)}</span>
+                                      <span>🎓 {tutor.sessions} sessions</span>
+                                      <span>✅ {tutor.reliability.toFixed(0)}% rel.</span>
+                                      <span>📅 {tutor.availableSlots} slots</span>
+                                      <span style={{ fontWeight: '700', color: '#1a5f4a' }}>Score {tutor.matchScore.toFixed(0)}</span>
+                                    </div>
+                                  </div>
+                                </div>
+                                <div style={{ marginTop: '14px', display: 'flex', justifyContent: 'flex-end' }}>
+                                  <button
+                                    type="button"
+                                    disabled={sendingTutorId === tutor.id}
+                                    onClick={() => sendRequestToTutor(rid, tutor)}
+                                    onMouseEnter={() => setHovered(`send-req-${tutor.id}`)}
+                                    onMouseLeave={() => setHovered(null)}
+                                    style={{
+                                      padding: '10px 20px',
+                                      background: sendingTutorId === tutor.id
+                                        ? '#e7e5e4'
+                                        : (hovered === `send-req-${tutor.id}` ? '#145040' : '#1a5f4a'),
+                                      color: sendingTutorId === tutor.id ? '#57534e' : '#fff',
+                                      border: 'none',
+                                      borderRadius: '8px',
+                                      fontWeight: '600',
+                                      cursor: sendingTutorId === tutor.id ? 'not-allowed' : 'pointer',
+                                      fontSize: '14px',
+                                      transition: 'all 0.2s ease',
+                                    }}
+                                  >
+                                    {sendingTutorId === tutor.id ? 'Sending...' : 'Send Request to Tutor →'}
+                                  </button>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                          <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '16px' }}>
+                            <button
+                              type="button"
+                              onClick={() => setActiveTab('home')}
+                              onMouseEnter={() => setHovered('pending-decide-later')}
+                              onMouseLeave={() => setHovered(null)}
+                              style={{
+                                padding: '12px 22px',
+                                background: hovered === 'pending-decide-later' ? '#f0faf5' : '#fff',
+                                border: hovered === 'pending-decide-later' ? '1px solid #1a5f4a' : '1px solid #e7e5e4',
+                                color: '#57534e',
+                                borderRadius: '10px',
+                                fontWeight: '500',
+                                cursor: 'pointer',
+                                fontSize: '15px',
+                                transition: 'all 0.2s ease',
+                              }}
+                            >
+                              Decide Later
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+
+        {learningFilterTab !== 'pending' && filteredLearningSessions.length === 0 && (
+            <div style={{ background: '#fff', borderRadius: '16px', border: '1px solid #e7e5e4', padding: '40px 24px', textAlign: 'center', color: '#57534e', marginBottom: '16px' }}>
+              No sessions in this section.
             </div>
-            <span style={{ background: '#fef3c7', color: '#92400e', border: '1px solid #fde68a', borderRadius: '20px', padding: '4px 12px', fontSize: '12px', fontWeight: '600', flexShrink: 0, marginLeft: '12px' }}>
-              🔍 Searching for Tutor
-            </span>
-          </div>
-          <div style={{ marginTop: '12px', fontSize: '13px', color: '#78716c' }}>
-            Your request is open. You'll be notified when a new tutor is available, or choose from current matches now.
-          </div>
-          <div style={{ marginTop: '8px', fontSize: '12px', color: '#a8a29e' }}>
-            Submitted {req.created_at ? formatDate(req.created_at) : ''}
-            {req.urgency_category && ` · ${getUrgency(req)}`}
-          </div>
-          <div style={{ marginTop: '14px' }}>
-            <button
-              type="button"
-              onClick={() => navigate(`/recommendations/${req.id ?? req.request_id}`)}
-              style={{ padding: '10px 20px', background: '#1a5f4a', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: '600', cursor: 'pointer', fontSize: '13px' }}
-            >
-              Choose Tutor →
-            </button>
-          </div>
-        </div>
-      ))}
-
-      {filteredLearningSessions.length === 0 && (learningFilterTab !== 'pending' || openTuteeRequests.length === 0) && (
-        <div style={{ background: '#fff', borderRadius: '16px', border: '1px solid #e7e5e4', padding: '40px 24px', textAlign: 'center', color: '#57534e', marginBottom: '16px' }}>
-          No sessions in this section.
-        </div>
-      )}
-
-      {filteredLearningSessions.map((tuteeSession) => {
+          )}
+        {filteredLearningSessions.map((tuteeSession) => {
         const sched = learningScheduleDisplay(tuteeSession);
         const venueLine = venueDisplayForLearning(tuteeSession);
         const st = normalizeSessionStatus(tuteeSession);
@@ -1941,6 +2301,7 @@ const Dashboard = () => {
         </div>
         );
       })}
+      </>
     </div>
     );
   };
