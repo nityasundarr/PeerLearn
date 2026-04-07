@@ -1675,7 +1675,8 @@ const Dashboard = () => {
       { key: 'cancelled', label: 'Cancelled' },
     ];
     const filteredLearningSessions = learningSessions.filter((s) => learningTuteeBucket(s) === learningFilterTab);
-    const pendingTabCount = openTuteeRequests.length;
+    const pendingLearningSessions = learningSessions.filter((s) => learningTuteeBucket(s) === 'pending');
+    const pendingTabCount = openTuteeRequests.length + pendingLearningSessions.length;
     return (
     <div>
       {requestSentTutor && (
@@ -1744,16 +1745,15 @@ const Dashboard = () => {
         })}
       </div>
 
-      {learningFilterTab === 'pending' ? (
-        openTuteeRequests.length === 0 ? (
+      <>
+        {learningFilterTab === 'pending' && openTuteeRequests.length === 0 && filteredLearningSessions.length === 0 && (
           <div style={{ background: '#fff', borderRadius: '16px',
             border: '1px solid #e7e5e4', padding: '40px 24px',
             textAlign: 'center', color: '#57534e', marginBottom: '16px' }}>
             No pending requests.
           </div>
-        ) : (
-          <>
-            {openTuteeRequests.map((req) => {
+        )}
+        {learningFilterTab === 'pending' && openTuteeRequests.map((req) => {
               const subj = req.subjects?.[0] || req.subject || '—';
               const topic = req.topics?.[0] || req.topic || '—';
               const level = req.academic_level || '—';
@@ -2048,16 +2048,13 @@ const Dashboard = () => {
                 </div>
               );
             })}
-          </>
-        )
-      ) : (
-        <>
-          {filteredLearningSessions.length === 0 && (
+
+        {learningFilterTab !== 'pending' && filteredLearningSessions.length === 0 && (
             <div style={{ background: '#fff', borderRadius: '16px', border: '1px solid #e7e5e4', padding: '40px 24px', textAlign: 'center', color: '#57534e', marginBottom: '16px' }}>
               No sessions in this section.
             </div>
           )}
-          {filteredLearningSessions.map((tuteeSession) => {
+        {filteredLearningSessions.map((tuteeSession) => {
         const sched = learningScheduleDisplay(tuteeSession);
         const venueLine = venueDisplayForLearning(tuteeSession);
         const st = normalizeSessionStatus(tuteeSession);
@@ -2304,8 +2301,7 @@ const Dashboard = () => {
         </div>
         );
       })}
-        </>
-      )}
+      </>
     </div>
     );
   };
