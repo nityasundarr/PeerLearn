@@ -648,6 +648,8 @@ const Dashboard = () => {
   const [expandedRequestId, setExpandedRequestId] = useState(null);
   const [pendingRecommendations, setPendingRecommendations] = useState({});
   const [pendingRecommendationsLoading, setPendingRecommendationsLoading] = useState({});
+  const [requestSentTutor, setRequestSentTutor] = useState(null);
+  const [sendingTutorId, setSendingTutorId] = useState(null);
 
   const stableSetChatSessionId = useCallback(
     (id) => setSelectedChatSessionId(id),
@@ -1639,14 +1641,20 @@ const Dashboard = () => {
 
   // MY LEARNING TAB
   const LearningTab = () => {
-    const sendRequestToTutor = async (requestId, tutorId) => {
+    const sendRequestToTutor = async (requestId, tutor) => {
+      setSendingTutorId(tutor.id);
       try {
-        await api.post('/sessions', { request_id: requestId, tutor_id: tutorId });
+        await api.post('/sessions', { request_id: requestId, tutor_id: tutor.id });
         await fetchLearningSessions();
         await fetchOpenTuteeRequests();
         await fetchNotifications();
+        setRequestSentTutor(tutor.name || 'the tutor');
+        setExpandedRequestId(null);
+        setTimeout(() => setRequestSentTutor(null), 5000);
       } catch (e) {
         console.error(e);
+      } finally {
+        setSendingTutorId(null);
       }
     };
 
@@ -1660,6 +1668,49 @@ const Dashboard = () => {
     const pendingTabCount = openTuteeRequests.length;
     return (
     <div>
+      {requestSentTutor && (
+        <div style={{
+          background: '#f0fdf4',
+          border: '1px solid #86efac',
+          borderRadius: '12px',
+          padding: '16px 20px',
+          marginBottom: '20px',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          gap: '12px',
+        }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <span style={{ fontSize: '24px' }}>✅</span>
+            <div>
+              <div style={{ fontSize: '15px', fontWeight: '600', color: '#166534' }}>
+                Request sent to {requestSentTutor}!
+              </div>
+              <div style={{ fontSize: '13px', color: '#15803d', marginTop: '2px' }}>
+                You&apos;ll be notified when they accept and propose time slots.
+                Check back here for updates.
+              </div>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setRequestSentTutor(null)}
+            style={{
+              background: 'none',
+              border: 'none',
+              cursor: 'pointer',
+              fontSize: '18px',
+              color: '#166534',
+              padding: '4px 8px',
+              borderRadius: '6px',
+              flexShrink: 0,
+            }}
+          >
+            ✕
+          </button>
+        </div>
+      )}
       <div style={{ display: 'flex', gap: '12px', marginBottom: '24px', flexWrap: 'wrap' }}>
         {learningTabKeys.map(({ key, label }) => {
           const sel = learningFilterTab === key;
@@ -1897,22 +1948,25 @@ const Dashboard = () => {
                                 <div style={{ marginTop: '14px', display: 'flex', justifyContent: 'flex-end' }}>
                                   <button
                                     type="button"
-                                    onClick={() => sendRequestToTutor(rid, tutor.id)}
+                                    disabled={sendingTutorId === tutor.id}
+                                    onClick={() => sendRequestToTutor(rid, tutor)}
                                     onMouseEnter={() => setHovered(`send-req-${tutor.id}`)}
                                     onMouseLeave={() => setHovered(null)}
                                     style={{
                                       padding: '10px 20px',
-                                      background: hovered === `send-req-${tutor.id}` ? '#145040' : '#1a5f4a',
-                                      color: '#fff',
+                                      background: sendingTutorId === tutor.id
+                                        ? '#e7e5e4'
+                                        : (hovered === `send-req-${tutor.id}` ? '#145040' : '#1a5f4a'),
+                                      color: sendingTutorId === tutor.id ? '#57534e' : '#fff',
                                       border: 'none',
                                       borderRadius: '8px',
                                       fontWeight: '600',
-                                      cursor: 'pointer',
+                                      cursor: sendingTutorId === tutor.id ? 'not-allowed' : 'pointer',
                                       fontSize: '14px',
                                       transition: 'all 0.2s ease',
                                     }}
                                   >
-                                    Send Request to Tutor →
+                                    {sendingTutorId === tutor.id ? 'Sending...' : 'Send Request to Tutor →'}
                                   </button>
                                 </div>
                               </div>
