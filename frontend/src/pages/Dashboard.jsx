@@ -2304,26 +2304,24 @@ const Dashboard = () => {
                 ⭐ Leave Feedback
               </button>
             )}
-            {learningFilterTab === 'past' && (
-              <button
-                type="button"
-                onClick={() => navigate('/complaints', { state: { preselectedSessionId: tuteeSession.id } })}
-                onMouseEnter={() => setHovered(`learn-report-${tuteeSession.id}`)}
-                onMouseLeave={() => setHovered(null)}
-                style={{
-                  padding: '10px 20px',
-                  background: hovered === `learn-report-${tuteeSession.id}` ? '#fef2f2' : '#fff',
-                  color: '#ef4444',
-                  border: `1px solid ${hovered === `learn-report-${tuteeSession.id}` ? '#ef4444' : '#fecaca'}`,
-                  borderRadius: '8px',
-                  fontWeight: '500',
-                  cursor: 'pointer',
-                  transition: 'all 0.2s ease',
-                }}
-              >
-                🚨 Report Issue
-              </button>
-            )}
+            <button
+              type="button"
+              onClick={() => navigate('/complaints', { state: { preselectedSessionId: tuteeSession.id } })}
+              onMouseEnter={() => setHovered(`learn-report-${tuteeSession.id}`)}
+              onMouseLeave={() => setHovered(null)}
+              style={{
+                padding: '10px 20px',
+                background: hovered === `learn-report-${tuteeSession.id}` ? '#fef2f2' : '#fff',
+                color: '#ef4444',
+                border: `1px solid ${hovered === `learn-report-${tuteeSession.id}` ? '#ef4444' : '#fecaca'}`,
+                borderRadius: '8px',
+                fontWeight: '500',
+                cursor: 'pointer',
+                transition: 'all 0.2s ease',
+              }}
+            >
+              🚨 Report Issue
+            </button>
             {['pending_tutor_selection', 'tutor_accepted', 'pending_confirmation', 'confirmed'].includes(tuteeSession.status) && (
             <button
               type="button"
