@@ -2092,7 +2092,18 @@ const Dashboard = () => {
               No sessions in this section.
             </div>
           )}
-        {filteredLearningSessions.map((tuteeSession) => {
+        {filteredLearningSessions.filter((s) => {
+          // In the pending tab, suppress sessions that are already represented
+          // by an open request card so we never show two cards for the same session.
+          //
+          // pending_tutor_selection → shown as a banner inside the request card; never as its own card
+          // tutor_accepted / pending_confirmation → shown as their own session card;
+          //   the request card returns null for these (handled above)
+          if (learningFilterTab !== 'pending') return true;
+          const sst = normalizeSessionStatus(s);
+          if (sst === 'pending_tutor_selection') return false;
+          return true;
+        }).map((tuteeSession) => {
         const sched = learningScheduleDisplay(tuteeSession);
         const venueLine = venueDisplayForLearning(tuteeSession);
         const st = normalizeSessionStatus(tuteeSession);
